@@ -9,8 +9,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
  * - Static, non-rotating label ring rendered outside the dial.
  * - Preserves leather texture/theme and accessibility.
  *
- * Correction:
- * Ensure clockwise/right rotation advances modes in natural order and the pointer aligns with the selected label.
+ * Centering improvements:
+ * - Wrap everything in a .mode-dial-wrapper that uses grid centering.
+ * - Ensure the knob and the letter ring share the same center by using a single sized square.
+ * - Distribute labels evenly in a perfect circle using polar math and absolute positioning from the same center.
  */
 export default function ModeDial({
   modes = ['AUTO', 'P', 'A', 'S', 'M'],
@@ -22,8 +24,10 @@ export default function ModeDial({
   // Geometry
   const radius = size / 2;
   const knobRadius = Math.max(20, radius * 0.58);
-  // labels should sit just outside the physical knob boundary
-  const labelRadius = radius * 1.1; // slightly outside to ensure separation visually
+
+  // Labels should sit just outside the physical knob boundary
+  // We space them relative to the rotor's bounding square so they form a ring around it.
+  const labelRadius = radius * 1.15; // slightly further to clear the knob edge
 
   // We define 0 degrees at top (12 o'clock) and increase clockwise for label placement.
   const degToRad = (d) => (d * Math.PI) / 180;
@@ -44,10 +48,7 @@ export default function ModeDial({
   // Rotation state for the knob (0..360), where 0deg visually means pointing to top (AUTO if it's first).
   const [rotation, setRotation] = useState(0);
 
-  // Map mode index to knob rotation:
-  // For natural behavior: when the knob rotates clockwise by +step, the next mode (index + 1) is selected.
-  // Because our label angles increase clockwise and pointer is visually fixed at top,
-  // the knob must rotate by the same positive angle to align the top with the next label.
+  // Map mode index to knob rotation
   const modeToRotation = (mode) => {
     const step = 360 / (modes.length || 1);
     const idx = Math.max(0, modes.findIndex((m) => m === mode));
@@ -74,11 +75,7 @@ export default function ModeDial({
   const angleFromCenterClockwiseFromTop = (cx, cy, x, y) => {
     const dx = x - cx;
     const dy = y - cy;
-    // atan2 returns angle from +x axis, counter-clockwise, but with screen y downwards; convert:
     const angleFromRight = (Math.atan2(dy, dx) * 180) / Math.PI; // -180..180, 0 at right
-    // Convert to 0..360 clockwise from top:
-    // angleFromTopCCW = angleFromRight + 90
-    // to make it ClockwiseFromTop: cw = (360 - angleFromTopCCW) % 360 = (270 - angleFromRight) % 360
     let cw = 270 - angleFromRight;
     cw = ((cw % 360) + 360) % 360;
     return cw;
@@ -182,17 +179,26 @@ export default function ModeDial({
     onChange && onChange(mode);
   };
 
-  // Center used for polar calc of labels
-  const center = { x: radius, y: radius };
+  // Single square that defines the center for both the ring and rotor
+  const outerSize = size * 2; // container square for ring/knob
+  const center = { x: outerSize / 2, y: outerSize / 2 };
 
   return (
     <div
-      className="dial-block"
+      className="mode-dial-wrapper"
       role="group"
       aria-label={ariaLabel}
-      style={{ position: 'relative', minWidth: size * 2, minHeight: size * 2 }}
+      style={{
+        display: 'grid',
+        placeItems: 'center',
+        // Allow this component to naturally size itself but remain centered
+        // by its parent (.dial or others).
+        width: outerSize,
+        height: outerSize + 24, // extra space for readout below
+        position: 'relative',
+      }}
     >
-      {/* Static, fixed letter ring outside the dial */}
+      {/* Static letter ring positioned in the same square so it shares the same center */}
       <div
         className="dial-segments"
         aria-hidden="false"
@@ -200,13 +206,13 @@ export default function ModeDial({
           position: 'absolute',
           left: 0,
           top: 0,
-          width: size * 2,
-          height: size * 2,
-          pointerEvents: 'none', // let clicks pass, we'll re-enable per-label
+          width: outerSize,
+          height: outerSize,
+          pointerEvents: 'none',
         }}
       >
         {modesWithAngles.map(({ mode, angle }) => {
-          const pos = polar(center, labelRadius, angle);
+          const pos = polar(center, labelRadius + radius - (size / 2), angle);
           const isActive = mode === value;
           return (
             <button
@@ -218,7 +224,7 @@ export default function ModeDial({
                 left: pos.x,
                 top: pos.y,
                 transform: 'translate(-50%, -50%)',
-                pointerEvents: 'auto', // make label clickable
+                pointerEvents: 'auto',
                 background: 'var(--bg)',
               }}
               onClick={() => onLabelClick(mode)}
@@ -233,7 +239,7 @@ export default function ModeDial({
         })}
       </div>
 
-      {/* Rotating dial/knob centered within the static ring */}
+      {/* Rotor centered in the same square */}
       <div
         ref={rotorRef}
         className="dial-rotor leather-texture"
@@ -241,8 +247,8 @@ export default function ModeDial({
           width: size,
           height: size,
           position: 'absolute',
-          left: size / 2,
-          top: size / 2,
+          left: '50%',
+          top: '50%',
           transform: 'translate(-50%, -50%)',
         }}
         title="Mode dial"
@@ -283,8 +289,8 @@ export default function ModeDial({
             width: knobRadius * 2,
             height: knobRadius * 2,
             position: 'absolute',
-            left: radius - knobRadius,
-            top: radius - knobRadius,
+            left: radius - knobRadius + 'px',
+            top: radius - knobRadius + 'px',
             transform: `rotate(${rotation}deg)`,
             zIndex: 1,
           }}
@@ -295,8 +301,8 @@ export default function ModeDial({
         </div>
       </div>
 
-      {/* Live readout */}
-      <div className="dial-readout" aria-live="polite" style={{ marginTop: size + 8, textAlign: 'center' }}>
+      {/* Live readout centered under the square */}
+      <div className="dial-readout" aria-live="polite" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center' }}>
         {value}
       </div>
     </div>

@@ -364,6 +364,38 @@ body {
   justify-items: center;
   gap: 6px;
 }
+
+/* Ensure ModeDial group (letters + knob) is centered in its area */
+.mode-dial-wrapper {
+  /* parent .dial already has position: relative and padding;
+     we center within our own square using grid in component inline styles */
+}
+
+/* Make sure buttons around the ring do not affect flow and are balanced */
+.mode-dial-wrapper .mode-segment {
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+/* When ModeDial is placed inside the compact dial container, center it both axes */
+.dial.compact .mode-dial-wrapper,
+.dial .mode-dial-wrapper {
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+/* Prevent layout jitter due to absolute ring buttons in different themes */
+.dial .dial-segments,
+.dial.compact .dial-segments {
+  pointer-events: none;
+}
+.dial .dial-segments .mode-segment,
+.dial.compact .dial-segments .mode-segment {
+  pointer-events: auto; /* keep labels clickable */
+}
 .dial-rotor {
   position: relative;
   border-radius: 50%;

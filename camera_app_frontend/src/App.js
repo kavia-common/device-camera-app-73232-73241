@@ -399,7 +399,17 @@ function App() {
           </button>
 
           {/* Program/Mode Dial (always-visible segments) */}
-          <div className="dial compact leather-texture" title="Mode dial" aria-label="Mode dial">
+          <div
+            className="dial compact leather-texture"
+            title="Mode dial"
+            aria-label="Mode dial"
+            style={{
+              display: 'grid',
+              placeItems: 'center',
+              /* Ensure a square area to host the centered ring+knob */
+              width: 120,
+            }}
+          >
             <ModeDial
               modes={modes}
               value={mode}
