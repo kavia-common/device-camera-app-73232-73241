@@ -8,6 +8,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
  * - Drag/keyboard interaction rotates the knob.
  * - Static, non-rotating label ring rendered outside the dial.
  * - Preserves leather texture/theme and accessibility.
+ *
+ * Correction:
+ * Ensure clockwise/right rotation advances modes in natural order and the pointer aligns with the selected label.
  */
 export default function ModeDial({
   modes = ['AUTO', 'P', 'A', 'S', 'M'],
@@ -21,23 +24,39 @@ export default function ModeDial({
   const knobRadius = Math.max(20, radius * 0.58);
   // labels should sit just outside the physical knob boundary
   const labelRadius = radius * 1.1; // slightly outside to ensure separation visually
-  const pointerOffsetDeg = 0; // pointer at the top
 
-  // Precompute label positions around full circle (fixed)
+  // We define 0 degrees at top (12 o'clock) and increase clockwise for label placement.
+  const degToRad = (d) => (d * Math.PI) / 180;
+  const polar = (center, r, angleDegClockwiseFromTop) => {
+    const a = degToRad(angleDegClockwiseFromTop - 90); // convert to canvas math
+    return {
+      x: center.x + r * Math.cos(a),
+      y: center.y + r * Math.sin(a),
+    };
+  };
+
+  // Precompute label positions around full circle (fixed; clockwise from top)
   const modesWithAngles = useMemo(() => {
     const step = 360 / (modes.length || 1);
-    return modes.map((m, i) => ({ mode: m, angle: i * step }));
+    return modes.map((m, i) => ({ mode: m, angle: i * step })); // 0deg=top, increase clockwise
   }, [modes]);
 
-  // Rotation state for the knob (0..360)
+  // Rotation state for the knob (0..360), where 0deg visually means pointing to top (AUTO if it's first).
   const [rotation, setRotation] = useState(0);
+
+  // Map mode index to knob rotation:
+  // For natural behavior: when the knob rotates clockwise by +step, the next mode (index + 1) is selected.
+  // Because our label angles increase clockwise and pointer is visually fixed at top,
+  // the knob must rotate by the same positive angle to align the top with the next label.
+  const modeToRotation = (mode) => {
+    const step = 360 / (modes.length || 1);
+    const idx = Math.max(0, modes.findIndex((m) => m === mode));
+    return (idx * step) % 360; // 0deg for first mode, +step for next, etc.
+  };
 
   // Initialize rotation to point at current value
   useEffect(() => {
-    const idx = modes.findIndex((m) => m === value);
-    const step = 360 / (modes.length || 1);
-    const desired = (360 - (idx * step + pointerOffsetDeg)) % 360;
-    setRotation(desired);
+    setRotation(modeToRotation(value));
   }, [value, modes]);
 
   const rotorRef = useRef(null);
@@ -51,14 +70,18 @@ export default function ModeDial({
     return d;
   };
 
-  // Helpers
-  const degToRad = (d) => (d * Math.PI) / 180;
-  const polar = (center, r, angleDeg) => {
-    const a = degToRad(angleDeg - 90); // 0 deg at top
-    return {
-      x: center.x + r * Math.cos(a),
-      y: center.y + r * Math.sin(a),
-    };
+  // Convert screen coords to angle where 0deg is top and increases clockwise
+  const angleFromCenterClockwiseFromTop = (cx, cy, x, y) => {
+    const dx = x - cx;
+    const dy = y - cy;
+    // atan2 returns angle from +x axis, counter-clockwise, but with screen y downwards; convert:
+    const angleFromRight = (Math.atan2(dy, dx) * 180) / Math.PI; // -180..180, 0 at right
+    // Convert to 0..360 clockwise from top:
+    // angleFromTopCCW = angleFromRight + 90
+    // to make it ClockwiseFromTop: cw = (360 - angleFromTopCCW) % 360 = (270 - angleFromRight) % 360
+    let cw = 270 - angleFromRight;
+    cw = ((cw % 360) + 360) % 360;
+    return cw;
   };
 
   // Map knob rotation to nearest mode at top
@@ -67,20 +90,15 @@ export default function ModeDial({
     let best = 0;
     let bestDist = Infinity;
     for (let i = 0; i < modes.length; i++) {
-      const target = (360 - (i * step + pointerOffsetDeg)) % 360;
-      const dist = Math.min(Math.abs(target - deg), 360 - Math.abs(target - deg));
+      const target = (i * step) % 360;
+      const diff = Math.abs(target - deg);
+      const dist = Math.min(diff, 360 - diff);
       if (dist < bestDist) {
         bestDist = dist;
         best = i;
       }
     }
     return modes[best];
-  };
-
-  const modeToRotation = (mode) => {
-    const step = 360 / (modes.length || 1);
-    const idx = Math.max(0, modes.findIndex((m) => m === mode));
-    return (360 - (idx * step + pointerOffsetDeg)) % 360;
   };
 
   // Pointer interactions
@@ -90,10 +108,8 @@ export default function ModeDial({
     const rect = rotorRef.current.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    const dx = e.clientX - cx;
-    const dy = e.clientY - cy;
-    const startAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
-    startAngleRef.current = startAngle;
+    const startAngleClockwise = angleFromCenterClockwiseFromTop(cx, cy, e.clientX, e.clientY);
+    startAngleRef.current = startAngleClockwise;
     baseRotationRef.current = rotation;
     try {
       rotorRef.current.setPointerCapture?.(e.pointerId);
@@ -105,10 +121,8 @@ export default function ModeDial({
     const rect = rotorRef.current.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    const dx = e.clientX - cx;
-    const dy = e.clientY - cy;
-    const currentAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
-    const delta = currentAngle - startAngleRef.current;
+    const currentAngleClockwise = angleFromCenterClockwiseFromTop(cx, cy, e.clientX, e.clientY);
+    const delta = currentAngleClockwise - startAngleRef.current; // positive delta = clockwise
     setRotation(normalizeDeg(baseRotationRef.current + delta));
   };
 
@@ -128,19 +142,19 @@ export default function ModeDial({
     } catch {}
   };
 
-  // Keyboard support
+  // Keyboard support (clockwise/right/up advances)
   const onKeyDown = (e) => {
     const currentIdx = modes.findIndex((m) => m === value);
     let nextIdx = currentIdx;
     switch (e.key) {
       case 'ArrowRight':
       case 'ArrowUp':
-        nextIdx = (currentIdx + 1) % modes.length;
+        nextIdx = (currentIdx + 1) % modes.length; // advance clockwise
         e.preventDefault();
         break;
       case 'ArrowLeft':
       case 'ArrowDown':
-        nextIdx = (currentIdx - 1 + modes.length) % modes.length;
+        nextIdx = (currentIdx - 1 + modes.length) % modes.length; // go counter-clockwise
         e.preventDefault();
         break;
       case 'Home':
