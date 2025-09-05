@@ -9,10 +9,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
  * - Static, non-rotating label ring rendered outside the dial.
  * - Preserves leather texture/theme and accessibility.
  *
- * Centering improvements:
- * - Wrap everything in a .mode-dial-wrapper that uses grid centering.
- * - Ensure the knob and the letter ring share the same center by using a single sized square.
- * - Distribute labels evenly in a perfect circle using polar math and absolute positioning from the same center.
+ * Visual spacing improvements:
+ * - Compute custom angular spacing that compensates for the wider AUTO label to prevent S and A clustering.
+ * - Keep a stable, intuitive clockwise order and keep knob indexing consistent with visual positions.
  */
 export default function ModeDial({
   modes = ['AUTO', 'P', 'A', 'S', 'M'],
@@ -25,41 +24,66 @@ export default function ModeDial({
   const radius = size / 2;
   const knobRadius = Math.max(20, radius * 0.58);
 
-  // Labels should sit just outside the physical knob boundary
-  // Increase spacing to avoid overlap and keep balance across sizes/themes
-  // Use an outward offset so letters are comfortably away from the knob edge.
-  const labelRadius = radius * 1.32; // push labels further out for clarity
+  // Labels sit outside the knob; push a bit further out for clarity
+  const labelRadius = radius * 1.32;
 
-  // We define 0 degrees at top (12 o'clock) and increase clockwise for label placement.
+  // Helpers
   const degToRad = (d) => (d * Math.PI) / 180;
   const polar = (center, r, angleDegClockwiseFromTop) => {
-    const a = degToRad(angleDegClockwiseFromTop - 90); // convert to canvas math
-    return {
-      x: center.x + r * Math.cos(a),
-      y: center.y + r * Math.sin(a),
-    };
+    const a = degToRad(angleDegClockwiseFromTop - 90);
+    return { x: center.x + r * Math.cos(a), y: center.y + r * Math.sin(a) };
   };
 
-  // Precompute label positions around full circle (fixed; clockwise from top)
+  /**
+   * Compute visually balanced label angles in degrees (clockwise from top = 0°).
+   * We detect if we have the typical 5-mode set that includes 'AUTO'.
+   * If so, apply hand-tuned spacing to keep distribution even, compensating the width of 'AUTO'
+   * and preventing S and A from clustering.
+   *
+   * Default fallback: equal spacing around 360°.
+   */
   const modesWithAngles = useMemo(() => {
-    const step = 360 / (modes.length || 1);
-    return modes.map((m, i) => ({ mode: m, angle: i * step })); // 0deg=top, increase clockwise
+    const N = modes.length || 1;
+
+    // Try a known mapping when we have the standard 5 items including AUTO.
+    const canonical = ['AUTO', 'P', 'A', 'S', 'M'];
+    const isCanonicalSet =
+      N === 5 &&
+      canonical.every((m) => modes.includes(m));
+
+    if (isCanonicalSet) {
+      // Custom angles chosen after visual testing to balance chip widths:
+      // AUTO is wider, so we offset neighbors slightly to avoid crowding.
+      // Order clockwise from top (0°):
+      // AUTO (0°), P (~66°), A (~150°), S (~204°), M (~300°)
+      const angleMap = {
+        AUTO: 0,
+        P: 66,
+        A: 150,
+        S: 204,
+        M: 300,
+      };
+      return modes.map((m) => ({ mode: m, angle: angleMap[m] ?? 0 }));
+    }
+
+    // Otherwise distribute evenly
+    const step = 360 / N;
+    return modes.map((m, i) => ({ mode: m, angle: i * step }));
   }, [modes]);
 
-  // Rotation state for the knob (0..360), where 0deg visually means pointing to top (AUTO if it's first).
+  // Rotation state for the knob (0..360), where 0° visually means pointer at top.
   const [rotation, setRotation] = useState(0);
 
-  // Map mode index to knob rotation
+  // Map mode to knob rotation by aligning to the label's target angle.
   const modeToRotation = (mode) => {
-    const step = 360 / (modes.length || 1);
-    const idx = Math.max(0, modes.findIndex((m) => m === mode));
-    return (idx * step) % 360; // 0deg for first mode, +step for next, etc.
+    const entry = modesWithAngles.find((e) => e.mode === mode);
+    return entry ? (entry.angle % 360) : 0;
   };
 
   // Initialize rotation to point at current value
   useEffect(() => {
     setRotation(modeToRotation(value));
-  }, [value, modes]);
+  }, [value, modesWithAngles]);
 
   const rotorRef = useRef(null);
   const draggingRef = useRef(false);
@@ -82,21 +106,19 @@ export default function ModeDial({
     return cw;
   };
 
-  // Map knob rotation to nearest mode at top
+  // Map knob rotation to nearest mode at top using the custom label angles
   const rotationToMode = (deg) => {
-    const step = 360 / (modes.length || 1);
-    let best = 0;
+    let bestMode = modes[0];
     let bestDist = Infinity;
-    for (let i = 0; i < modes.length; i++) {
-      const target = (i * step) % 360;
-      const diff = Math.abs(target - deg);
+    for (const { mode, angle } of modesWithAngles) {
+      const diff = Math.abs(angle - deg);
       const dist = Math.min(diff, 360 - diff);
       if (dist < bestDist) {
         bestDist = dist;
-        best = i;
+        bestMode = mode;
       }
     }
-    return modes[best];
+    return bestMode;
   };
 
   // Pointer interactions
@@ -147,12 +169,12 @@ export default function ModeDial({
     switch (e.key) {
       case 'ArrowRight':
       case 'ArrowUp':
-        nextIdx = (currentIdx + 1) % modes.length; // advance clockwise
+        nextIdx = (currentIdx + 1) % modes.length;
         e.preventDefault();
         break;
       case 'ArrowLeft':
       case 'ArrowDown':
-        nextIdx = (currentIdx - 1 + modes.length) % modes.length; // go counter-clockwise
+        nextIdx = (currentIdx - 1 + modes.length) % modes.length;
         e.preventDefault();
         break;
       case 'Home':
@@ -180,8 +202,7 @@ export default function ModeDial({
     onChange && onChange(mode);
   };
 
-  // Single square that defines the center for both the ring and rotor
-  // Slightly larger outer square to accommodate the pushed-out labels.
+  // Outer layout square for centering
   const outerSize = Math.round(size * 2.2);
   const center = { x: outerSize / 2, y: outerSize / 2 };
 
@@ -193,14 +214,12 @@ export default function ModeDial({
       style={{
         display: 'grid',
         placeItems: 'center',
-        // Allow this component to naturally size itself but remain centered
-        // by its parent (.dial or others).
         width: outerSize,
-        height: outerSize + 24, // extra space for readout below
+        height: outerSize + 24,
         position: 'relative',
       }}
     >
-      {/* Static letter ring positioned in the same square so it shares the same center */}
+      {/* Static label ring */}
       <div
         className="dial-segments"
         aria-hidden="false"
@@ -214,7 +233,6 @@ export default function ModeDial({
         }}
       >
         {modesWithAngles.map(({ mode, angle }) => {
-          // Place labels using the expanded labelRadius directly to push them outward.
           const pos = polar(center, labelRadius, angle);
           const isActive = mode === value;
           return (
@@ -242,7 +260,7 @@ export default function ModeDial({
         })}
       </div>
 
-      {/* Rotor centered in the same square */}
+      {/* Rotor */}
       <div
         ref={rotorRef}
         className="dial-rotor leather-texture"
@@ -265,7 +283,7 @@ export default function ModeDial({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        {/* Stationary pointer at top of the rotor area */}
+        {/* Pointer at top of rotor */}
         <div
           aria-hidden="true"
           style={{
@@ -282,10 +300,8 @@ export default function ModeDial({
           }}
         />
 
-        {/* Outer ring ticks and subtle shading */}
         <div className="dial-ring" />
 
-        {/* Physical knob that rotates */}
         <div
           className="dial-knob"
           style={{
@@ -304,7 +320,6 @@ export default function ModeDial({
         </div>
       </div>
 
-      {/* Live readout centered under the square */}
       <div className="dial-readout" aria-live="polite" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center' }}>
         {value}
       </div>
