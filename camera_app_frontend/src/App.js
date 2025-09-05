@@ -9,14 +9,44 @@ import './App.css';
  * - Download/save captured images
  * - Professional controls UI (manual focus, white balance, ISO, exposure, zoom)
  *
- * Notes on browser/hardware limitations:
- * - Browser APIs expose some capabilities via MediaTrackConstraints and applyConstraints.
- * - Most desktop browsers and many devices do NOT allow true manual control of
- *   focusDistance, whiteBalanceMode, iso, or exposureCompensation via getUserMedia.
- * - Where unsupported, this app simulates the UI/UX and documents any limitation.
- * - Zoom is more widely supported as a constraint/property on video tracks; we
- *   attempt to use it and gracefully fallback to CSS zoom simulation on the video element.
+ * DSLR UI restyle:
+ * - Central viewfinder with frame markers and info overlay line
+ * - Circular shutter button
+ * - Mode dial (P/A/S/M/Auto)
+ * - Cluster of DSLR-inspired buttons: Flash, ISO, WB, Menu, Info
+ * - Tooltips/aria-labels for clarity
  */
+
+// Simple inline SVG icons
+const IconFlash = ({ on = false }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 2v11h3v9l7-14h-4l4-6z" fill={on ? 'var(--color-accent)' : 'currentColor'} />
+  </svg>
+);
+const IconISO = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" fill="none" />
+    <text x="12" y="15" fontSize="8" textAnchor="middle" fill="currentColor" fontFamily="monospace">ISO</text>
+  </svg>
+);
+const IconWB = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M4 12h16" stroke="currentColor" strokeWidth="2" />
+    <circle cx="8" cy="12" r="3" fill="currentColor" />
+    <circle cx="16" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+const IconMenu = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+const IconInfo = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+    <path d="M12 10v6M12 7h.01" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
 
 // PUBLIC_INTERFACE
 function App() {
@@ -45,29 +75,35 @@ function App() {
   const [contrast, setContrast] = useState(100); // percent
 
   // Professional controls state (with capability-driven application)
-  // Even if these aren't supported natively, we present the UI for consistency.
   const [zoom, setZoom] = useState(1.0);
   const [zoomSupported, setZoomSupported] = useState(false);
 
-  const [focusMode, setFocusMode] = useState('auto'); // auto, manual
-  const [focusDistance, setFocusDistance] = useState(0); // 0..1 (normalized target)
+  const [focusMode, setFocusMode] = useState('auto');
+  const [focusDistance, setFocusDistance] = useState(0);
   const [focusSupported, setFocusSupported] = useState(false);
 
-  const [wbMode, setWbMode] = useState('auto'); // auto / incandescent / fluorescent / daylight / cloudy / warm
+  const [wbMode, setWbMode] = useState('auto');
   const [wbSupported, setWbSupported] = useState(false);
 
-  const [iso, setIso] = useState(100); // simulated value if unsupported
+  const [iso, setIso] = useState(100);
   const [isoSupported, setIsoSupported] = useState(false);
 
-  const [exposureComp, setExposureComp] = useState(0); // EV steps (simulated with CSS brightness/contrast if unsupported)
+  const [exposureComp, setExposureComp] = useState(0);
   const [exposureSupported, setExposureSupported] = useState(false);
 
+  const [flashOn, setFlashOn] = useState(false);
+  const [showInfo, setShowInfo] = useState(true);
+  const [showMenu, setShowMenu] = useState(false);
+
+  // Mode dial: P/A/S/M/Auto
+  const modes = ['AUTO', 'P', 'A', 'S', 'M'];
+  const [mode, setMode] = useState('AUTO');
+
   // Derived styling for exposure compensation when not natively supported:
-  // Each EV step ~ +/- 10% brightness, with slight contrast adjustment.
   const exposureFilter = useCallback(() => {
     const ev = exposureComp;
-    const b = 100 + ev * 10; // +/- per EV
-    const c = 100 + ev * 4;  // small contrast tweak
+    const b = 100 + ev * 10;
+    const c = 100 + ev * 4;
     return { brightness: b, contrast: c };
   }, [exposureComp]);
 
@@ -101,36 +137,27 @@ function App() {
   }, [buildFilter]);
 
   // PUBLIC_INTERFACE
-  const requestCamera = useCallback(async (mode = facingMode, res = resolution) => {
-    /**
-     * Request camera with constraints; gracefully handle unsupported environments.
-     */
+  const requestCamera = useCallback(async (modeArg = facingMode, res = resolution) => {
     setError('');
     try {
-      // Stop any existing tracks before requesting a new one
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
       }
-
-      // Parse resolution like "1280x720"
       let widthIdeal = 1280, heightIdeal = 720;
       if (typeof res === 'string' && res.includes('x')) {
         const [w, h] = res.split('x').map(n => parseInt(n, 10));
         if (!Number.isNaN(w) && !Number.isNaN(h)) {
-          widthIdeal = w;
-          heightIdeal = h;
+          widthIdeal = w; heightIdeal = h;
         }
       }
-
       const constraints = {
         audio: false,
         video: {
-          facingMode: { ideal: mode },
+          facingMode: { ideal: modeArg },
           width: { ideal: widthIdeal },
           height: { ideal: heightIdeal }
         }
       };
-
       const newStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(newStream);
       const vt = newStream.getVideoTracks()[0];
@@ -138,8 +165,6 @@ function App() {
       if (videoRef.current) {
         videoRef.current.srcObject = newStream;
       }
-
-      // Query capabilities and set supported flags
       try {
         const caps = vt.getCapabilities ? vt.getCapabilities() : {};
         setZoomSupported(typeof caps.zoom !== 'undefined');
@@ -147,44 +172,34 @@ function App() {
         setWbSupported(typeof caps.whiteBalanceMode !== 'undefined');
         setIsoSupported(typeof caps.iso !== 'undefined');
         setExposureSupported(typeof caps.exposureCompensation !== 'undefined');
-
-        // Initialize zoom if supported
         if (typeof caps.zoom !== 'undefined') {
           const settings = vt.getSettings ? vt.getSettings() : {};
-          const currentZoom = settings.zoom || 1.0;
-          setZoom(currentZoom);
+          setZoom(settings.zoom || 1.0);
         } else {
           setZoom(1.0);
         }
-      } catch (capErr) {
-        // Capabilities not supported; keep defaults and simulate
+      } catch {
         setZoomSupported(false);
         setFocusSupported(false);
         setWbSupported(false);
         setIsoSupported(false);
         setExposureSupported(false);
       }
-
       setIsReady(true);
     } catch (e) {
       console.error('Camera access error:', e);
-      setError(
-        'Unable to access the camera. Please grant permission and ensure a camera device is available.'
-      );
+      setError('Unable to access the camera. Please grant permission and ensure a camera device is available.');
       setIsReady(false);
       setVideoTrack(null);
     }
   }, [stream, facingMode, resolution]);
 
   useEffect(() => {
-    // Request camera on mount
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       requestCamera();
     } else {
       setError('Camera API not supported in this browser.');
     }
-
-    // Cleanup on unmount
     return () => {
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
@@ -194,9 +209,6 @@ function App() {
 
   // PUBLIC_INTERFACE
   const switchCamera = async () => {
-    /**
-     * Switch between front and back cameras where supported.
-     */
     const next = facingMode === 'user' ? 'environment' : 'user';
     setFacingMode(next);
     await requestCamera(next, resolution);
@@ -204,13 +216,8 @@ function App() {
 
   // PUBLIC_INTERFACE
   const applyZoom = async (z) => {
-    /**
-     * Attempts to apply native zoom. If unsupported, falls back to CSS transform.
-     */
     setZoom(z);
     if (!videoTrack) return;
-
-    // Native zoom if supported
     try {
       const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
       if (typeof caps.zoom !== 'undefined') {
@@ -218,12 +225,7 @@ function App() {
         await videoTrack.applyConstraints({ advanced: [{ zoom: clamped }] });
         return;
       }
-    } catch (e) {
-      // Fall back to CSS below
-    }
-
-    // CSS zoom simulation as fallback (not a true optical/digital sensor zoom)
-    // We simulate by scaling and cropping the video using transform.
+    } catch {}
     if (videoRef.current) {
       const v = videoRef.current;
       const scale = Math.max(1, z);
@@ -233,67 +235,42 @@ function App() {
   };
 
   // PUBLIC_INTERFACE
-  const applyFocus = async (mode, distance) => {
-    /**
-     * Attempts to apply focus settings where supported.
-     * Limitations: Most browsers don't expose manual focus controls to web apps.
-     * We update UI state and try applyConstraints; if not supported, UI is simulated only.
-     */
-    setFocusMode(mode);
+  const applyFocus = async (modeArg, distance) => {
+    setFocusMode(modeArg);
     setFocusDistance(distance);
-
     if (!videoTrack) return;
     try {
       const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
       const advanced = [];
-
-      if (caps.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes(mode)) {
-        advanced.push({ focusMode: mode });
+      if (caps.focusMode && Array.isArray(caps.focusMode) && caps.focusMode.includes(modeArg)) {
+        advanced.push({ focusMode: modeArg });
       }
-      if (typeof caps.focusDistance !== 'undefined' && mode === 'manual') {
+      if (typeof caps.focusDistance !== 'undefined' && modeArg === 'manual') {
         const min = caps.focusDistance.min ?? 0;
         const max = caps.focusDistance.max ?? 1;
         const val = Math.min(Math.max(distance, min), max);
         advanced.push({ focusDistance: val });
       }
-
-      if (advanced.length > 0) {
-        await videoTrack.applyConstraints({ advanced });
-      }
-    } catch (e) {
-      // Unsupported, UI simulation only
-    }
+      if (advanced.length > 0) await videoTrack.applyConstraints({ advanced });
+    } catch {}
   };
 
   // PUBLIC_INTERFACE
-  const applyWhiteBalance = async (mode) => {
-    /**
-     * Attempts to apply white balance preset where supported.
-     * Common modes include: 'auto', 'incandescent', 'fluorescent', 'daylight', 'cloudy'
-     * Most browsers will not expose this; we keep for spec alignment and UI simulation.
-     */
-    setWbMode(mode);
+  const applyWhiteBalance = async (modeArg) => {
+    setWbMode(modeArg);
     if (!videoTrack) return;
-
     try {
       const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
-      if (caps.whiteBalanceMode && Array.isArray(caps.whiteBalanceMode) && caps.whiteBalanceMode.includes(mode)) {
-        await videoTrack.applyConstraints({ advanced: [{ whiteBalanceMode: mode }] });
+      if (caps.whiteBalanceMode && Array.isArray(caps.whiteBalanceMode) && caps.whiteBalanceMode.includes(modeArg)) {
+        await videoTrack.applyConstraints({ advanced: [{ whiteBalanceMode: modeArg }] });
       }
-    } catch (e) {
-      // Unsupported; simulated via UI only
-    }
+    } catch {}
   };
 
   // PUBLIC_INTERFACE
   const applyISO = async (value) => {
-    /**
-     * Attempts to set ISO where supported. In practice, not supported in most browsers.
-     * We keep this to present a professional control UI and future-proofing.
-     */
     setIso(value);
     if (!videoTrack) return;
-
     try {
       const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
       if (typeof caps.iso !== 'undefined') {
@@ -302,20 +279,13 @@ function App() {
         const clamped = Math.min(Math.max(value, min), max);
         await videoTrack.applyConstraints({ advanced: [{ iso: clamped }] });
       }
-    } catch (e) {
-      // Unsupported; simulated via UI only
-    }
+    } catch {}
   };
 
   // PUBLIC_INTERFACE
   const applyExposureComp = async (value) => {
-    /**
-     * Attempts to set exposure compensation where supported.
-     * If unsupported, we adjust preview via CSS (handled in buildFilter).
-     */
     setExposureComp(value);
     if (!videoTrack) return;
-
     try {
       const caps = videoTrack.getCapabilities ? videoTrack.getCapabilities() : {};
       if (typeof caps.exposureCompensation !== 'undefined') {
@@ -324,43 +294,29 @@ function App() {
         const clamped = Math.min(Math.max(value, min), max);
         await videoTrack.applyConstraints({ advanced: [{ exposureCompensation: clamped }] });
       }
-    } catch (e) {
-      // Unsupported; CSS-based simulation only
-    }
+    } catch {}
   };
 
   // PUBLIC_INTERFACE
   const capturePhoto = () => {
-    /**
-     * Captures a frame from the video to a canvas and stores it as a dataURL.
-     */
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-
     try {
       setIsCapturing(true);
       const width = video.videoWidth;
       const height = video.videoHeight;
-
       if (width === 0 || height === 0) {
-        // Video not ready yet
         setIsCapturing(false);
         return;
       }
-
       canvas.width = width;
       canvas.height = height;
-
       const ctx = canvas.getContext('2d');
-      // Apply the same filter to the canvas when drawing
       ctx.filter = buildFilter();
-      // If CSS zoom simulation was applied, it affects preview only.
-      // Captured image uses full frame from stream (as expected).
       ctx.drawImage(video, 0, 0, width, height);
       const dataURL = canvas.toDataURL('image/png', 1.0);
-
-      setPhotos(prev => [dataURL, ...prev].slice(0, 12)); // keep recent up to 12
+      setPhotos(prev => [dataURL, ...prev].slice(0, 12));
     } finally {
       setIsCapturing(false);
     }
@@ -368,9 +324,6 @@ function App() {
 
   // PUBLIC_INTERFACE
   const downloadPhoto = (dataURL, index = 0) => {
-    /**
-     * Triggers a download of the provided dataURL.
-     */
     const a = document.createElement('a');
     a.href = dataURL;
     a.download = `photo_${index + 1}.png`;
@@ -381,7 +334,6 @@ function App() {
 
   const hasBackCameraSupport = 'mediaDevices' in navigator;
 
-  // Apply filters to a given image dataURL and trigger download
   // PUBLIC_INTERFACE
   const downloadWithFilter = (dataURL, index = 0) => {
     const img = new Image();
@@ -399,18 +351,34 @@ function App() {
     img.src = dataURL;
   };
 
-  // Helpers for rendering supported hint
   const SupportTag = ({ ok }) => (
     <span style={{ fontSize: 11, color: ok ? 'var(--color-primary)' : 'var(--muted)' }}>
       {ok ? 'native' : 'simulated'}
     </span>
   );
 
+  // DSLR-inspired segmented UI
   return (
     <div className="camera-app">
       <nav className="topbar">
-        <div className="brand">Camera</div>
+        <div className="brand">DSLR Cam</div>
         <div className="actions">
+          {/* Mode dial display */}
+          <div className="mode-dial" role="radiogroup" aria-label="Mode dial">
+            {modes.map((m) => (
+              <button
+                key={m}
+                className={`mode-segment ${mode === m ? 'active' : ''}`}
+                onClick={() => setMode(m)}
+                role="radio"
+                aria-checked={mode === m}
+                aria-label={`Set mode ${m}`}
+                title={`Mode: ${m}`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
           {hasBackCameraSupport && (
             <button
               className="btn btn-secondary"
@@ -418,55 +386,115 @@ function App() {
               title="Switch camera"
               aria-label="Switch camera"
             >
-              ↺ Switch
+              ↺
             </button>
           )}
         </div>
       </nav>
 
       <main className="content">
-        <section className="preview-card">
-          {/* Settings Bar */}
-          <div className="settings-bar" role="region" aria-label="Camera settings">
-            <div className="settings-row">
-              <label htmlFor="resolution-select">Resolution</label>
-              <div className="select">
-                <select
-                  id="resolution-select"
-                  value={resolution}
-                  onChange={async (e) => {
-                    const val = e.target.value;
-                    setResolution(val);
-                    await requestCamera(facingMode, val);
-                  }}
-                  aria-label="Select camera resolution"
-                >
-                  {resolutions.map((r) => (
-                    <option value={r} key={r}>{r}</option>
-                  ))}
-                </select>
-              </div>
+        <section className="dslr-shell">
+          {/* Left side button column */}
+          <aside className="dslr-side left">
+            <button
+              className={`round-btn ${flashOn ? 'active' : ''}`}
+              onClick={() => setFlashOn((v) => !v)}
+              aria-pressed={flashOn}
+              aria-label="Toggle flash"
+              title={`Flash ${flashOn ? 'On' : 'Off'}`}
+            >
+              <IconFlash on={flashOn} />
+            </button>
+            <button
+              className="round-btn"
+              onClick={() => setShowInfo((v) => !v)}
+              aria-pressed={showInfo}
+              aria-label="Toggle info overlay"
+              title="Info"
+            >
+              <IconInfo />
+            </button>
+          </aside>
 
-              <label style={{ marginLeft: 8 }}>Facing</label>
-              <button
-                className="btn btn-secondary btn-small"
-                onClick={switchCamera}
-                aria-label="Toggle camera facing mode"
-                title="Toggle camera facing mode"
-              >
-                {facingMode === 'user' ? 'Front' : 'Back'}
-              </button>
+          {/* Viewfinder center */}
+          <div className="viewfinder">
+            <div className="vf-frame" aria-hidden="true">
+              <span className="vf-corner tl" />
+              <span className="vf-corner tr" />
+              <span className="vf-corner bl" />
+              <span className="vf-corner br" />
+              <span className="vf-center" />
             </div>
+            <div className="video-wrapper viewfinder-video">
+              {!error && (
+                <video
+                  ref={videoRef}
+                  className="video"
+                  style={{ filter: previewFilter }}
+                  autoPlay
+                  playsInline
+                  muted
+                  onLoadedMetadata={() => setIsReady(true)}
+                />
+              )}
+              <canvas ref={canvasRef} className="hidden-canvas" aria-hidden="true" />
+              {!isReady && !error && (
+                <div className="placeholder">Initializing camera…</div>
+              )}
+              {error && <div className="error">{error}</div>}
+            </div>
+            {showInfo && (
+              <div className="vf-info" aria-live="polite">
+                <span title="Mode" aria-label={`Mode ${mode}`}>{mode}</span>
+                <span title="ISO" aria-label={`ISO ${iso}`}>ISO {iso}</span>
+                <span title="WB" aria-label={`White balance ${wbMode}`}>WB {wbMode}</span>
+                <span title="Zoom" aria-label={`Zoom ${zoom.toFixed(1)}x`}>{zoom.toFixed(1)}x</span>
+                <span title="EV" aria-label={`Exposure compensation ${exposureComp}`}>
+                  EV {exposureComp > 0 ? `+${exposureComp}` : exposureComp}
+                </span>
+                <span title="Resolution" aria-label={`Resolution ${resolution}`}>{resolution}</span>
+              </div>
+            )}
           </div>
 
-          {/* Professional Controls */}
-          <div className="settings-bar" role="region" aria-label="Pro controls">
-            {/* Zoom */}
-            <div className="settings-row">
-              <label htmlFor="zoom-range">Zoom <SupportTag ok={zoomSupported} /></label>
-              <div className="range">
+          {/* Right side vertical control cluster */}
+          <aside className="dslr-side right">
+            <button
+              className="round-btn"
+              onClick={() => setShowMenu((v) => !v)}
+              aria-pressed={showMenu}
+              aria-label="Menu"
+              title="Menu"
+            >
+              <IconMenu />
+            </button>
+            <button
+              className="round-btn"
+              onClick={() => applyWhiteBalance(wbMode === 'auto' ? 'daylight' : 'auto')}
+              aria-label="Toggle white balance Auto/Daylight"
+              title="WB"
+            >
+              <IconWB />
+            </button>
+            <button
+              className="round-btn"
+              onClick={() => applyISO(Math.min(800, iso + 100))}
+              aria-label="Increase ISO"
+              title="ISO +"
+            >
+              <IconISO />
+            </button>
+          </aside>
+
+          {/* Bottom control rail with pro controls & shutter */}
+          <div className="bottom-rail">
+            <div className="rail-section">
+              {/* Quick settings condensed to match DSLR style */}
+              <div className="dial">
+                <label className="dial-label" title="Zoom">
+                  Zoom <SupportTag ok={zoomSupported} />
+                </label>
                 <input
-                  id="zoom-range"
                   type="range"
                   min="1"
                   max="5"
@@ -475,84 +503,13 @@ function App() {
                   onChange={(e) => applyZoom(parseFloat(e.target.value))}
                   aria-label="Zoom"
                 />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{zoom.toFixed(1)}x</span>
               </div>
-            </div>
 
-            {/* Focus */}
-            <div className="settings-row">
-              <label htmlFor="focus-mode">Focus <SupportTag ok={focusSupported} /></label>
-              <div className="select">
-                <select
-                  id="focus-mode"
-                  value={focusMode}
-                  onChange={(e) => applyFocus(e.target.value, focusDistance)}
-                  aria-label="Focus mode"
-                >
-                  <option value="auto">Auto</option>
-                  <option value="manual">Manual</option>
-                </select>
-              </div>
-              {focusMode === 'manual' && (
-                <div className="range">
-                  <input
-                    id="focus-distance"
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={focusDistance}
-                    onChange={(e) => applyFocus('manual', parseFloat(e.target.value))}
-                    aria-label="Manual focus distance"
-                  />
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>{focusDistance.toFixed(2)}</span>
-                </div>
-              )}
-            </div>
-
-            {/* White Balance */}
-            <div className="settings-row">
-              <label htmlFor="wb-mode">White Balance <SupportTag ok={wbSupported} /></label>
-              <div className="chips" role="listbox" aria-label="White balance presets">
-                {['auto','daylight','cloudy','incandescent','fluorescent','warm'].map(m => (
-                  <button
-                    key={m}
-                    className={`chip ${wbMode === m ? 'active' : ''}`}
-                    onClick={() => applyWhiteBalance(m)}
-                    role="option"
-                    aria-selected={wbMode === m}
-                    aria-label={`White balance ${m}`}
-                  >
-                    {m.charAt(0).toUpperCase() + m.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* ISO */}
-            <div className="settings-row">
-              <label htmlFor="iso-range">ISO <SupportTag ok={isoSupported} /></label>
-              <div className="range">
+              <div className="dial">
+                <label className="dial-label" title="Exposure">
+                  EV <SupportTag ok={exposureSupported} />
+                </label>
                 <input
-                  id="iso-range"
-                  type="range"
-                  min="50"
-                  max="800"
-                  step="10"
-                  value={iso}
-                  onChange={(e) => applyISO(parseInt(e.target.value, 10))}
-                  aria-label="ISO"
-                />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{iso}</span>
-              </div>
-            </div>
-
-            {/* Exposure Compensation */}
-            <div className="settings-row">
-              <label htmlFor="exp-range">Exposure EV <SupportTag ok={exposureSupported} /></label>
-              <div className="range">
-                <input
-                  id="exp-range"
                   type="range"
                   min="-3"
                   max="3"
@@ -561,94 +518,159 @@ function App() {
                   onChange={(e) => applyExposureComp(parseFloat(e.target.value))}
                   aria-label="Exposure compensation"
                 />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {exposureComp > 0 ? `+${exposureComp}` : exposureComp}
-                </span>
               </div>
-            </div>
-          </div>
 
-          {/* Filters Bar */}
-          <div className="filters-bar" role="region" aria-label="Filters">
-            <div className="filters-row">
-              <label>Preset</label>
-              <div className="chips" role="listbox" aria-label="Filter presets">
-                {['none','grayscale','sepia','invert'].map(p => (
-                  <button
-                    key={p}
-                    className={`chip ${filterPreset === p ? 'active' : ''}`}
-                    onClick={() => setFilterPreset(p)}
-                    aria-label={`Set filter ${p}`}
-                    role="option"
-                    aria-selected={filterPreset === p}
+              <div className="dial">
+                <label className="dial-label" title="ISO">
+                  ISO <SupportTag ok={isoSupported} />
+                </label>
+                <input
+                  type="range"
+                  min="50"
+                  max="800"
+                  step="10"
+                  value={iso}
+                  onChange={(e) => applyISO(parseInt(e.target.value, 10))}
+                  aria-label="ISO"
+                />
+              </div>
+
+              <div className="dial">
+                <label className="dial-label" title="Focus">Focus <SupportTag ok={focusSupported} /></label>
+                <div className="dial-inline">
+                  <select
+                    value={focusMode}
+                    onChange={(e) => applyFocus(e.target.value, focusDistance)}
+                    aria-label="Focus mode"
+                    title="Focus mode"
                   >
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="filters-row">
-              <label htmlFor="brightness-range">Brightness</label>
-              <div className="range">
-                <input
-                  id="brightness-range"
-                  type="range"
-                  min="50"
-                  max="150"
-                  step="1"
-                  value={brightness}
-                  onChange={(e) => setBrightness(parseInt(e.target.value, 10))}
-                  aria-label="Brightness"
-                />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{brightness}%</span>
+                    <option value="auto">Auto</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                  {focusMode === 'manual' && (
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={focusDistance}
+                      onChange={(e) => applyFocus('manual', parseFloat(e.target.value))}
+                      aria-label="Manual focus distance"
+                      title="Manual focus"
+                    />
+                  )}
+                </div>
               </div>
 
-              <label htmlFor="contrast-range" style={{ marginLeft: 8 }}>Contrast</label>
-              <div className="range">
-                <input
-                  id="contrast-range"
-                  type="range"
-                  min="50"
-                  max="150"
-                  step="1"
-                  value={contrast}
-                  onChange={(e) => setContrast(parseInt(e.target.value, 10))}
-                  aria-label="Contrast"
-                />
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{contrast}%</span>
+              <div className="dial">
+                <label className="dial-label" title="WB">
+                  WB <SupportTag ok={wbSupported} />
+                </label>
+                <div className="chips tight" role="listbox" aria-label="White balance presets">
+                  {['auto','daylight','cloudy'].map(p => (
+                    <button
+                      key={p}
+                      className={`chip ${wbMode === p ? 'active' : ''}`}
+                      onClick={() => applyWhiteBalance(p)}
+                      role="option"
+                      aria-selected={wbMode === p}
+                      title={`WB ${p}`}
+                      aria-label={`White balance ${p}`}
+                    >
+                      {p[0].toUpperCase() + p.slice(1)}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-          <div className="video-wrapper">
-            {!error && (
-              <video
-                ref={videoRef}
-                className="video"
-                style={{ filter: previewFilter }}
-                autoPlay
-                playsInline
-                muted
-                onLoadedMetadata={() => setIsReady(true)}
-              />
-            )}
-            {/* Hidden canvas used for capturing frames */}
-            <canvas ref={canvasRef} className="hidden-canvas" aria-hidden="true" />
-            {!isReady && !error && (
-              <div className="placeholder">Initializing camera…</div>
-            )}
-            {error && <div className="error">{error}</div>}
-          </div>
 
-          <div className="controls">
-            <button
-              className="capture-button"
-              onClick={capturePhoto}
-              disabled={!isReady || !!error || isCapturing}
-              aria-label="Capture photo"
-              title={isReady ? 'Capture photo' : 'Camera not ready'}
-            >
-              <span className="capture-dot" />
-            </button>
+            {/* Shutter area */}
+            <div className="shutter-area">
+              <button
+                className="capture-button dslr"
+                onClick={capturePhoto}
+                disabled={!isReady || !!error || isCapturing}
+                aria-label="Shutter - capture photo"
+                title={isReady ? 'Capture photo' : 'Camera not ready'}
+              >
+                <span className="capture-dot" />
+              </button>
+            </div>
+
+            {/* Utility area: resolution + facing + filters */}
+            <div className="rail-section right-compact">
+              <div className="dial compact">
+                <label className="dial-label">Res</label>
+                <select
+                  value={resolution}
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    setResolution(val);
+                    await requestCamera(facingMode, val);
+                  }}
+                  aria-label="Select camera resolution"
+                  title="Resolution"
+                >
+                  {resolutions.map((r) => (
+                    <option value={r} key={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="dial compact">
+                <label className="dial-label">Cam</label>
+                <button
+                  className="btn btn-secondary btn-small"
+                  onClick={switchCamera}
+                  aria-label="Toggle camera facing mode"
+                  title="Toggle camera"
+                >
+                  {facingMode === 'user' ? 'Front' : 'Back'}
+                </button>
+              </div>
+              <div className="dial compact">
+                <label className="dial-label">FX</label>
+                <div className="chips tight" role="listbox" aria-label="Filter presets">
+                  {['none','grayscale','sepia','invert'].map(p => (
+                    <button
+                      key={p}
+                      className={`chip ${filterPreset === p ? 'active' : ''}`}
+                      onClick={() => setFilterPreset(p)}
+                      aria-label={`Set filter ${p}`}
+                      role="option"
+                      title={`Filter ${p}`}
+                      aria-selected={filterPreset === p}
+                    >
+                      {p[0].toUpperCase() + p.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="dial compact">
+                <label className="dial-label">Tone</label>
+                <div className="dial-inline">
+                  <input
+                    type="range"
+                    min="50"
+                    max="150"
+                    step="1"
+                    value={brightness}
+                    onChange={(e) => setBrightness(parseInt(e.target.value, 10))}
+                    aria-label="Brightness"
+                    title="Brightness"
+                  />
+                  <input
+                    type="range"
+                    min="50"
+                    max="150"
+                    step="1"
+                    value={contrast}
+                    onChange={(e) => setContrast(parseInt(e.target.value, 10))}
+                    aria-label="Contrast"
+                    title="Contrast"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -698,6 +720,23 @@ function App() {
       <footer className="footer">
         <span>Made with ❤️</span>
       </footer>
+
+      {/* Simple inline menu panel */}
+      {showMenu && (
+        <div className="menu-panel" role="dialog" aria-label="Menu">
+          <div className="menu-content">
+            <h3>Menu</h3>
+            <ul>
+              <li>Mode: {mode}</li>
+              <li>Resolution: {resolution}</li>
+              <li>ISO: {iso}</li>
+              <li>WB: {wbMode}</li>
+              <li>Zoom: {zoom.toFixed(1)}x</li>
+            </ul>
+            <button className="btn" onClick={() => setShowMenu(false)} aria-label="Close menu">Close</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
