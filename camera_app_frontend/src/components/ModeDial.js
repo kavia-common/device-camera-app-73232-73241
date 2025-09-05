@@ -52,16 +52,20 @@ export default function ModeDial({
       canonical.every((m) => modes.includes(m));
 
     if (isCanonicalSet) {
-      // Custom angles chosen after visual testing to balance chip widths:
-      // AUTO is wider, so we offset neighbors slightly to avoid crowding.
+      // Custom angles tuned for visually even spacing.
+      // Rationale:
+      // - AUTO is wide; keep it centered at 0° (top).
+      // - Distribute P, A, S, M so their chip centers maintain near-even visual gaps,
+      //   with a slightly larger gap near AUTO to avoid crowding.
       // Order clockwise from top (0°):
-      // AUTO (0°), P (~66°), A (~150°), S (~204°), M (~300°)
+      // AUTO (0°), P (68°), A (152°), S (208°), M (296°)
+      // This widens the A–S gap slightly, reducing perceived crowding between S and A.
       const angleMap = {
         AUTO: 0,
-        P: 66,
-        A: 150,
-        S: 204,
-        M: 300,
+        P: 68,
+        A: 152,
+        S: 208,
+        M: 296,
       };
       return modes.map((m) => ({ mode: m, angle: angleMap[m] ?? 0 }));
     }
