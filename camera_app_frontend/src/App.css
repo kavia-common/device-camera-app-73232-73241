@@ -1,104 +1,271 @@
-/* CSS Variables for Theme Management */
+/* Theme variables - light minimalistic */
 :root {
-  /* Light theme colors */
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8f9fa;
-  --text-primary: #282c34;
-  --text-secondary: #61dafb;
-  --border-color: #e9ecef;
-  --button-bg: #007bff;
-  --button-text: #ffffff;
+  --color-primary: #1976d2;
+  --color-accent: #f50057;
+  --color-secondary: #ffffff;
+
+  --bg: #ffffff;
+  --bg-elev: #f7f9fc;
+  --text: #1f2a37;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --shadow: 0 6px 24px rgba(0,0,0,0.06), 0 2px 6px rgba(0,0,0,0.04);
+
+  --radius: 16px;
 }
 
-[data-theme="dark"] {
-  /* Dark theme colors */
-  --bg-primary: #1a1a1a;
-  --bg-secondary: #282c34;
-  --text-primary: #ffffff;
-  --text-secondary: #61dafb;
-  --border-color: #404040;
-  --button-bg: #0056b3;
-  --button-text: #ffffff;
+/* Layout */
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
 }
 
-.App {
-  text-align: center;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
+}
+
+.camera-app {
   min-height: 100vh;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+/* Topbar */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--color-primary);
 }
 
-.App-header {
-  background-color: var(--bg-secondary);
-  min-height: 100vh;
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Content */
+.content {
+  max-width: 980px;
+  padding: 24px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.preview-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.video-wrapper {
+  position: relative;
+  width: 100%;
+  background: var(--bg-elev);
+  border-radius: calc(var(--radius) - 8px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  aspect-ratio: 16 / 9;
+  display: grid;
+  place-items: center;
+}
+
+.video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.placeholder {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.error {
+  color: var(--color-accent);
+  background: #fff0f4;
+  border: 1px solid #ffd1e0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+/* Controls */
+.controls {
+  display: grid;
+  place-items: center;
+  padding: 16px 0 4px;
+}
+
+.capture-button {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  border: 4px solid var(--color-primary);
+  background: var(--color-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+  box-shadow: 0 6px 18px rgba(25,118,210,0.25), 0 1px 3px rgba(25,118,210,0.2);
+}
+
+.capture-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.capture-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.capture-button:active:not(:disabled) {
+  transform: translateY(0px) scale(0.98);
+}
+
+.capture-dot {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+/* Buttons */
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.btn:active {
+  transform: translateY(0px);
+}
+
+.btn-secondary {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.btn-small {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.btn-link {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 8px;
+}
+
+.btn-link:hover {
+  color: var(--color-accent);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Gallery */
+.gallery {
+  margin-top: 22px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.gallery-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.section-title {
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.thumbs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(120px, 160px);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.thumb {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-elev);
   display: flex;
   flex-direction: column;
-  align-items: center;
+}
+
+.thumb img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.thumb-actions {
+  display: flex;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: var(--text-primary);
-  transition: background-color 0.3s ease;
-  position: relative;
+  padding: 8px;
+  gap: 8px;
 }
 
-.App-link {
-  color: var(--text-secondary);
-  transition: color 0.3s ease;
+/* Footer */
+.footer {
+  padding: 14px 20px;
+  text-align: center;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  background: var(--bg);
 }
 
-.theme-toggle {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  background-color: var(--button-bg);
-  color: var(--button-text);
-  border: none;
-  border-radius: 8px;
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.hidden-canvas {
+  display: none;
 }
 
-.theme-toggle:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-  opacity: 0.9;
-}
-
-.theme-toggle:active {
-  transform: translateY(0);
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Responsive design for mobile */
-@media (max-width: 768px) {
-  .theme-toggle {
-    top: 10px;
-    right: 10px;
-    padding: 8px 16px;
-    font-size: 12px;
-  }
+/* Responsive tweaks */
+@media (max-width: 640px) {
+  .content { padding: 16px; }
+  .capture-button { width: 66px; height: 66px; }
+  .capture-dot { width: 40px; height: 40px; }
 }

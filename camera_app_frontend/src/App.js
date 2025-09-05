@@ -1,47 +1,226 @@
-import React, { useState, useEffect } from 'react';
-import logo from './logo.svg';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './App.css';
+
+/**
+ * CameraApp provides:
+ * - Live camera preview using getUserMedia
+ * - Capture photos from the video stream to a canvas
+ * - Recent gallery bar for captured images
+ * - Download/save captured images
+ * The UI is modern, minimalistic, and light-themed using the specified colors.
+ */
 
 // PUBLIC_INTERFACE
 function App() {
-  const [theme, setTheme] = useState('light');
-
-  // Effect to apply theme to document element
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+  /** State for media stream and UI */
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [stream, setStream] = useState(null);
+  const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState('');
+  const [photos, setPhotos] = useState([]);
+  const [facingMode, setFacingMode] = useState('user'); // 'user' (front) or 'environment' (back) where supported
+  const [isCapturing, setIsCapturing] = useState(false);
 
   // PUBLIC_INTERFACE
-  const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+  const requestCamera = useCallback(async (mode = facingMode) => {
+    /**
+     * Request camera with constraints; gracefully handle unsupported environments.
+     */
+    setError('');
+    try {
+      // Stop any existing tracks before requesting a new one
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+
+      const constraints = {
+        audio: false,
+        video: {
+          facingMode: { ideal: mode },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      };
+
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(newStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = newStream;
+      }
+      setIsReady(true);
+    } catch (e) {
+      console.error('Camera access error:', e);
+      setError(
+        'Unable to access the camera. Please grant permission and ensure a camera device is available.'
+      );
+      setIsReady(false);
+    }
+  }, [stream, facingMode]);
+
+  useEffect(() => {
+    // Request camera on mount
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      requestCamera();
+    } else {
+      setError('Camera API not supported in this browser.');
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // PUBLIC_INTERFACE
+  const switchCamera = async () => {
+    /**
+     * Switch between front and back cameras where supported.
+     */
+    const next = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(next);
+    await requestCamera(next);
   };
 
+  // PUBLIC_INTERFACE
+  const capturePhoto = () => {
+    /**
+     * Captures a frame from the video to a canvas and stores it as a dataURL.
+     */
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    try {
+      setIsCapturing(true);
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+
+      if (width === 0 || height === 0) {
+        // Video not ready yet
+        setIsCapturing(false);
+        return;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, width, height);
+      const dataURL = canvas.toDataURL('image/png', 1.0);
+
+      setPhotos(prev => [dataURL, ...prev].slice(0, 12)); // keep recent up to 12
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  // PUBLIC_INTERFACE
+  const downloadPhoto = (dataURL, index = 0) => {
+    /**
+     * Triggers a download of the provided dataURL.
+     */
+    const a = document.createElement('a');
+    a.href = dataURL;
+    a.download = `photo_${index + 1}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const hasBackCameraSupport = 'mediaDevices' in navigator;
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <button 
-          className="theme-toggle" 
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-        >
-          {theme === 'light' ? '🌙 Dark' : '☀️ Light'}
-        </button>
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <p>
-          Current theme: <strong>{theme}</strong>
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="camera-app">
+      <nav className="topbar">
+        <div className="brand">Camera</div>
+        <div className="actions">
+          {hasBackCameraSupport && (
+            <button
+              className="btn btn-secondary"
+              onClick={switchCamera}
+              title="Switch camera"
+              aria-label="Switch camera"
+            >
+              ↺ Switch
+            </button>
+          )}
+        </div>
+      </nav>
+
+      <main className="content">
+        <section className="preview-card">
+          <div className="video-wrapper">
+            {!error && (
+              <video
+                ref={videoRef}
+                className="video"
+                autoPlay
+                playsInline
+                muted
+                onLoadedMetadata={() => setIsReady(true)}
+              />
+            )}
+            {/* Hidden canvas used for capturing frames */}
+            <canvas ref={canvasRef} className="hidden-canvas" aria-hidden="true" />
+            {!isReady && !error && (
+              <div className="placeholder">Initializing camera…</div>
+            )}
+            {error && <div className="error">{error}</div>}
+          </div>
+
+          <div className="controls">
+            <button
+              className="capture-button"
+              onClick={capturePhoto}
+              disabled={!isReady || !!error || isCapturing}
+              aria-label="Capture photo"
+              title={isReady ? 'Capture photo' : 'Camera not ready'}
+            >
+              <span className="capture-dot" />
+            </button>
+          </div>
+        </section>
+
+        {photos.length > 0 && (
+          <section className="gallery">
+            <div className="gallery-header">
+              <h2 className="section-title">Recent</h2>
+              <div className="gallery-actions">
+                <button
+                  className="btn btn-link"
+                  onClick={() => setPhotos([])}
+                  aria-label="Clear gallery"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="thumbs">
+              {photos.map((src, idx) => (
+                <figure key={idx} className="thumb">
+                  <img src={src} alt={`Captured ${idx + 1}`} />
+                  <figcaption className="thumb-actions">
+                    <button
+                      className="btn btn-small"
+                      onClick={() => downloadPhoto(src, idx)}
+                      aria-label={`Download image ${idx + 1}`}
+                    >
+                      Download
+                    </button>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+
+      <footer className="footer">
+        <span>Made with ❤️</span>
+      </footer>
     </div>
   );
 }
