@@ -22,8 +22,49 @@ function App() {
   const [facingMode, setFacingMode] = useState('user'); // 'user' (front) or 'environment' (back) where supported
   const [isCapturing, setIsCapturing] = useState(false);
 
+  // Camera resolution settings
+  const [resolution, setResolution] = useState('1280x720'); // default
+  const resolutions = [
+    '640x480',
+    '1280x720',
+    '1920x1080'
+  ];
+
+  // Filters state
+  const [filterPreset, setFilterPreset] = useState('none'); // none, grayscale, sepia, invert, custom
+  const [brightness, setBrightness] = useState(100); // percent
+  const [contrast, setContrast] = useState(100); // percent
+
+  // Build CSS filter string for preview/capture
+  const buildFilter = useCallback(() => {
+    let base = '';
+    switch (filterPreset) {
+      case 'grayscale':
+        base = 'grayscale(1)';
+        break;
+      case 'sepia':
+        base = 'sepia(1)';
+        break;
+      case 'invert':
+        base = 'invert(1)';
+        break;
+      case 'none':
+      default:
+        base = '';
+    }
+    const b = `brightness(${brightness}%)`;
+    const c = `contrast(${contrast}%)`;
+    const parts = [base, b, c].filter(Boolean);
+    return parts.join(' ').trim() || 'none';
+  }, [filterPreset, brightness, contrast]);
+
+  const [previewFilter, setPreviewFilter] = useState('none');
+  useEffect(() => {
+    setPreviewFilter(buildFilter());
+  }, [buildFilter]);
+
   // PUBLIC_INTERFACE
-  const requestCamera = useCallback(async (mode = facingMode) => {
+  const requestCamera = useCallback(async (mode = facingMode, res = resolution) => {
     /**
      * Request camera with constraints; gracefully handle unsupported environments.
      */
@@ -34,12 +75,22 @@ function App() {
         stream.getTracks().forEach(t => t.stop());
       }
 
+      // Parse resolution like "1280x720"
+      let widthIdeal = 1280, heightIdeal = 720;
+      if (typeof res === 'string' && res.includes('x')) {
+        const [w, h] = res.split('x').map(n => parseInt(n, 10));
+        if (!Number.isNaN(w) && !Number.isNaN(h)) {
+          widthIdeal = w;
+          heightIdeal = h;
+        }
+      }
+
       const constraints = {
         audio: false,
         video: {
           facingMode: { ideal: mode },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: widthIdeal },
+          height: { ideal: heightIdeal }
         }
       };
 
@@ -56,7 +107,7 @@ function App() {
       );
       setIsReady(false);
     }
-  }, [stream, facingMode]);
+  }, [stream, facingMode, resolution]);
 
   useEffect(() => {
     // Request camera on mount
@@ -81,7 +132,7 @@ function App() {
      */
     const next = facingMode === 'user' ? 'environment' : 'user';
     setFacingMode(next);
-    await requestCamera(next);
+    await requestCamera(next, resolution);
   };
 
   // PUBLIC_INTERFACE
@@ -108,6 +159,8 @@ function App() {
       canvas.height = height;
 
       const ctx = canvas.getContext('2d');
+      // Apply the same filter to the canvas when drawing
+      ctx.filter = buildFilter();
       ctx.drawImage(video, 0, 0, width, height);
       const dataURL = canvas.toDataURL('image/png', 1.0);
 
@@ -132,6 +185,24 @@ function App() {
 
   const hasBackCameraSupport = 'mediaDevices' in navigator;
 
+  // Apply filters to a given image dataURL and trigger download
+  // PUBLIC_INTERFACE
+  const downloadWithFilter = (dataURL, index = 0) => {
+    const img = new Image();
+    img.onload = () => {
+      const cnv = document.createElement('canvas');
+      cnv.width = img.width;
+      cnv.height = img.height;
+      const ctx = cnv.getContext('2d');
+      ctx.filter = buildFilter();
+      ctx.drawImage(img, 0, 0);
+      const out = cnv.toDataURL('image/png', 1.0);
+      downloadPhoto(out, index);
+    };
+    img.crossOrigin = 'anonymous';
+    img.src = dataURL;
+  };
+
   return (
     <div className="camera-app">
       <nav className="topbar">
@@ -152,11 +223,96 @@ function App() {
 
       <main className="content">
         <section className="preview-card">
+          {/* Settings Bar */}
+          <div className="settings-bar" role="region" aria-label="Camera settings">
+            <div className="settings-row">
+              <label htmlFor="resolution-select">Resolution</label>
+              <div className="select">
+                <select
+                  id="resolution-select"
+                  value={resolution}
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    setResolution(val);
+                    await requestCamera(facingMode, val);
+                  }}
+                  aria-label="Select camera resolution"
+                >
+                  {resolutions.map((r) => (
+                    <option value={r} key={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              <label style={{ marginLeft: 8 }}>Facing</label>
+              <button
+                className="btn btn-secondary btn-small"
+                onClick={switchCamera}
+                aria-label="Toggle camera facing mode"
+                title="Toggle camera facing mode"
+              >
+                {facingMode === 'user' ? 'Front' : 'Back'}
+              </button>
+            </div>
+          </div>
+
+          {/* Filters Bar */}
+          <div className="filters-bar" role="region" aria-label="Filters">
+            <div className="filters-row">
+              <label>Preset</label>
+              <div className="chips" role="listbox" aria-label="Filter presets">
+                {['none','grayscale','sepia','invert'].map(p => (
+                  <button
+                    key={p}
+                    className={`chip ${filterPreset === p ? 'active' : ''}`}
+                    onClick={() => setFilterPreset(p)}
+                    aria-label={`Set filter ${p}`}
+                    role="option"
+                    aria-selected={filterPreset === p}
+                  >
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="filters-row">
+              <label htmlFor="brightness-range">Brightness</label>
+              <div className="range">
+                <input
+                  id="brightness-range"
+                  type="range"
+                  min="50"
+                  max="150"
+                  step="1"
+                  value={brightness}
+                  onChange={(e) => setBrightness(parseInt(e.target.value, 10))}
+                  aria-label="Brightness"
+                />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{brightness}%</span>
+              </div>
+
+              <label htmlFor="contrast-range" style={{ marginLeft: 8 }}>Contrast</label>
+              <div className="range">
+                <input
+                  id="contrast-range"
+                  type="range"
+                  min="50"
+                  max="150"
+                  step="1"
+                  value={contrast}
+                  onChange={(e) => setContrast(parseInt(e.target.value, 10))}
+                  aria-label="Contrast"
+                />
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>{contrast}%</span>
+              </div>
+            </div>
+          </div>
           <div className="video-wrapper">
             {!error && (
               <video
                 ref={videoRef}
                 className="video"
+                style={{ filter: previewFilter }}
                 autoPlay
                 playsInline
                 muted
@@ -206,9 +362,18 @@ function App() {
                     <button
                       className="btn btn-small"
                       onClick={() => downloadPhoto(src, idx)}
-                      aria-label={`Download image ${idx + 1}`}
+                      aria-label={`Download original image ${idx + 1}`}
+                      title="Download original"
                     >
                       Download
+                    </button>
+                    <button
+                      className="btn btn-small btn-secondary"
+                      onClick={() => downloadWithFilter(src, idx)}
+                      aria-label={`Download filtered image ${idx + 1}`}
+                      title="Download with current filter"
+                    >
+                      Download (filtered)
                     </button>
                   </figcaption>
                 </figure>
