@@ -3,11 +3,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 /**
  * PUBLIC_INTERFACE
  * ModeDial
- * A tactile, realistic DSLR program dial:
- * - All modes (AUTO/P/A/S/M) are distributed around the dial circumference.
- * - The dial can be rotated via drag, click, or keyboard so that the selected mode aligns to the top pointer.
- * - Leather texture and dual themes preserved via CSS variables and existing classes.
- * - Accessible: roving tab behavior for segments, group semantics, live readout.
+ * DSLR-like mode dial where letters (AUTO/P/A/S/M) are fixed outside the dial.
+ * Only the inner knob rotates; the top pointer aligns to the selected mode.
+ * - Drag/keyboard interaction rotates the knob.
+ * - Static, non-rotating label ring rendered outside the dial.
+ * - Preserves leather texture/theme and accessibility.
  */
 export default function ModeDial({
   modes = ['AUTO', 'P', 'A', 'S', 'M'],
@@ -16,31 +16,33 @@ export default function ModeDial({
   size = 56,
   ariaLabel = 'Program/Mode Dial',
 }) {
+  // Geometry
   const radius = size / 2;
-  const innerRadius = Math.max(20, radius * 0.58); // inner knob radius for tactile look
-  const labelRadius = radius * 0.84; // ring where text sits
-  const pointerOffsetDeg = 0; // 0deg is top (aligned with dial-pip)
+  const knobRadius = Math.max(20, radius * 0.58);
+  // labels should sit just outside the physical knob boundary
+  const labelRadius = radius * 1.1; // slightly outside to ensure separation visually
+  const pointerOffsetDeg = 0; // pointer at the top
 
-  // Create even angular distribution for all modes around 360 degrees
+  // Precompute label positions around full circle (fixed)
   const modesWithAngles = useMemo(() => {
     const step = 360 / (modes.length || 1);
     return modes.map((m, i) => ({ mode: m, angle: i * step }));
   }, [modes]);
 
-  // Internal rotation state in degrees [0..360)
+  // Rotation state for the knob (0..360)
   const [rotation, setRotation] = useState(0);
 
-  // Initialize rotation to align current value with pointer (top)
+  // Initialize rotation to point at current value
   useEffect(() => {
     const idx = modes.findIndex((m) => m === value);
     const step = 360 / (modes.length || 1);
     const desired = (360 - (idx * step + pointerOffsetDeg)) % 360;
     setRotation(desired);
-  }, [value, modes, pointerOffsetDeg]);
+  }, [value, modes]);
 
   const rotorRef = useRef(null);
   const draggingRef = useRef(false);
-  const baseRotationRef = useRef(0); // rotation at drag start
+  const baseRotationRef = useRef(0);
   const startAngleRef = useRef(0);
 
   const normalizeDeg = (deg) => {
@@ -49,26 +51,24 @@ export default function ModeDial({
     return d;
   };
 
-  // Position utilities
+  // Helpers
   const degToRad = (d) => (d * Math.PI) / 180;
-  const polar = (r, angleDeg) => {
-    const a = degToRad(angleDeg - 90); // set 0deg to top
+  const polar = (center, r, angleDeg) => {
+    const a = degToRad(angleDeg - 90); // 0 deg at top
     return {
-      x: radius + r * Math.cos(a),
-      y: radius + r * Math.sin(a),
+      x: center.x + r * Math.cos(a),
+      y: center.y + r * Math.sin(a),
     };
   };
 
-  // Given a rotation, compute which mode is aligned to pointer at top
+  // Map knob rotation to nearest mode at top
   const rotationToMode = (deg) => {
     const step = 360 / (modes.length || 1);
-    // Effective label angle for mode i at this rotation is: (i*step + pointerOffset) rotated by -rotation
-    // We want the one closest to pointer (which is at pointerOffsetDeg).
     let best = 0;
     let bestDist = Infinity;
     for (let i = 0; i < modes.length; i++) {
-      const labelAngle = (i * step + pointerOffsetDeg - (360 - deg)) % 360;
-      const dist = Math.min(Math.abs(labelAngle), 360 - Math.abs(labelAngle));
+      const target = (360 - (i * step + pointerOffsetDeg)) % 360;
+      const dist = Math.min(Math.abs(target - deg), 360 - Math.abs(target - deg));
       if (dist < bestDist) {
         bestDist = dist;
         best = i;
@@ -77,16 +77,13 @@ export default function ModeDial({
     return modes[best];
   };
 
-  // Snap rotation to center a given mode at the pointer
   const modeToRotation = (mode) => {
     const step = 360 / (modes.length || 1);
     const idx = Math.max(0, modes.findIndex((m) => m === mode));
-    // Make the chosen mode land at pointerOffsetDeg
-    const desired = (360 - (idx * step + pointerOffsetDeg)) % 360;
-    return desired;
+    return (360 - (idx * step + pointerOffsetDeg)) % 360;
   };
 
-  // Handle pointer interactions for dragging the dial
+  // Pointer interactions
   const onPointerDown = (e) => {
     if (!rotorRef.current) return;
     draggingRef.current = true;
@@ -95,7 +92,7 @@ export default function ModeDial({
     const cy = rect.top + rect.height / 2;
     const dx = e.clientX - cx;
     const dy = e.clientY - cy;
-    const startAngle = (Math.atan2(dy, dx) * 180) / Math.PI; // [-180..180]
+    const startAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
     startAngleRef.current = startAngle;
     baseRotationRef.current = rotation;
     try {
@@ -110,30 +107,29 @@ export default function ModeDial({
     const cy = rect.top + rect.height / 2;
     const dx = e.clientX - cx;
     const dy = e.clientY - cy;
-    const currentAngle = (Math.atan2(dy, dx) * 180) / Math.PI; // [-180..180]
+    const currentAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
     const delta = currentAngle - startAngleRef.current;
-    const next = normalizeDeg(baseRotationRef.current + delta);
-    setRotation(next);
+    setRotation(normalizeDeg(baseRotationRef.current + delta));
   };
 
-  const endDragAndSnap = () => {
+  const finishDrag = () => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     const chosen = rotationToMode(rotation);
     const snap = modeToRotation(chosen);
     setRotation(snap);
-    if (onChange) onChange(chosen);
+    onChange && onChange(chosen);
   };
 
   const onPointerUp = () => {
-    endDragAndSnap();
+    finishDrag();
     try {
       rotorRef.current?.releasePointerCapture?.();
     } catch {}
   };
 
+  // Keyboard support
   const onKeyDown = (e) => {
-    const step = 360 / (modes.length || 1);
     const currentIdx = modes.findIndex((m) => m === value);
     let nextIdx = currentIdx;
     switch (e.key) {
@@ -165,27 +161,76 @@ export default function ModeDial({
     }
   };
 
-  // Handle clicking a mode label: rotate the dial so it aligns to pointer
+  // Click a letter to rotate knob under it
   const onLabelClick = (mode) => {
     const target = modeToRotation(mode);
     setRotation(target);
     onChange && onChange(mode);
   };
 
-  // Compute positions for labels; rotate the label ring opposite to the dial so labels stay upright
-  const labelRingRotation = -rotation;
+  // Center used for polar calc of labels
+  const center = { x: radius, y: radius };
 
   return (
     <div
       className="dial-block"
       role="group"
       aria-label={ariaLabel}
-      style={{ minWidth: size, minHeight: size }}
+      style={{ position: 'relative', minWidth: size * 2, minHeight: size * 2 }}
     >
+      {/* Static, fixed letter ring outside the dial */}
+      <div
+        className="dial-segments"
+        aria-hidden="false"
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: size * 2,
+          height: size * 2,
+          pointerEvents: 'none', // let clicks pass, we'll re-enable per-label
+        }}
+      >
+        {modesWithAngles.map(({ mode, angle }) => {
+          const pos = polar(center, labelRadius, angle);
+          const isActive = mode === value;
+          return (
+            <button
+              key={mode}
+              type="button"
+              className={`mode-segment ${isActive ? 'active' : ''}`}
+              style={{
+                position: 'absolute',
+                left: pos.x,
+                top: pos.y,
+                transform: 'translate(-50%, -50%)',
+                pointerEvents: 'auto', // make label clickable
+                background: 'var(--bg)',
+              }}
+              onClick={() => onLabelClick(mode)}
+              aria-pressed={isActive}
+              aria-label={`Set mode ${mode}`}
+              title={mode}
+              tabIndex={-1}
+            >
+              {mode}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Rotating dial/knob centered within the static ring */}
       <div
         ref={rotorRef}
         className="dial-rotor leather-texture"
-        style={{ width: size, height: size, position: 'relative' }}
+        style={{
+          width: size,
+          height: size,
+          position: 'absolute',
+          left: size / 2,
+          top: size / 2,
+          transform: 'translate(-50%, -50%)',
+        }}
         title="Mode dial"
         role="application"
         tabIndex={0}
@@ -197,10 +242,7 @@ export default function ModeDial({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        {/* Outer ring with ticks and subtle shading */}
-        <div className="dial-ring" />
-
-        {/* Stationary pointer at the top (visual indicator) */}
+        {/* Stationary pointer at top of the rotor area */}
         <div
           aria-hidden="true"
           style={{
@@ -217,53 +259,18 @@ export default function ModeDial({
           }}
         />
 
-        {/* Label ring: rotates opposite to keep text upright, shows all modes around circumference */}
-        <div
-          className="dial-segments"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            transform: `rotate(${labelRingRotation}deg)`,
-            zIndex: 2,
-          }}
-        >
-          {modesWithAngles.map(({ mode, angle }, i) => {
-            const pos = polar(labelRadius, angle);
-            const isActive = mode === value;
-            return (
-              <button
-                key={mode}
-                type="button"
-                className={`mode-segment ${isActive ? 'active' : ''}`}
-                style={{
-                  position: 'absolute',
-                  left: pos.x,
-                  top: pos.y,
-                  transform: 'translate(-50%, -50%)',
-                  background: 'var(--bg)',
-                }}
-                onClick={() => onLabelClick(mode)}
-                aria-pressed={isActive}
-                aria-label={`Set mode ${mode}`}
-                title={mode}
-                tabIndex={-1}
-              >
-                {mode}
-              </button>
-            );
-          })}
-        </div>
+        {/* Outer ring ticks and subtle shading */}
+        <div className="dial-ring" />
 
-        {/* The physical knob that rotates with the dial */}
+        {/* Physical knob that rotates */}
         <div
           className="dial-knob"
           style={{
-            width: innerRadius * 2,
-            height: innerRadius * 2,
+            width: knobRadius * 2,
+            height: knobRadius * 2,
             position: 'absolute',
-            left: radius - innerRadius,
-            top: radius - innerRadius,
+            left: radius - knobRadius,
+            top: radius - knobRadius,
             transform: `rotate(${rotation}deg)`,
             zIndex: 1,
           }}
@@ -274,7 +281,8 @@ export default function ModeDial({
         </div>
       </div>
 
-      <div className="dial-readout" aria-live="polite">
+      {/* Live readout */}
+      <div className="dial-readout" aria-live="polite" style={{ marginTop: size + 8, textAlign: 'center' }}>
         {value}
       </div>
     </div>
