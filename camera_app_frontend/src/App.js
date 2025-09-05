@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './App.css';
+import Dial from './components/Dial';
 
 /**
  * CameraApp provides:
@@ -395,21 +396,24 @@ function App() {
           >
             {isDark ? '🌙 Dark' : '☀️ Light'}
           </button>
-          {/* Mode dial display */}
-          <div className="mode-dial leather-texture" role="radiogroup" aria-label="Mode dial">
-            {modes.map((m) => (
-              <button
-                key={m}
-                className={`mode-segment ${mode === m ? 'active' : ''}`}
-                onClick={() => setMode(m)}
-                role="radio"
-                aria-checked={mode === m}
-                aria-label={`Set mode ${m}`}
-                title={`Mode: ${m}`}
-              >
-                {m}
-              </button>
-            ))}
+
+          {/* Program/Mode Dial (rotating) */}
+          <div className="dial compact leather-texture" title="Mode dial" aria-label="Mode dial">
+            <Dial
+              label="Mode"
+              min={0}
+              max={modes.length - 1}
+              step={1}
+              value={modes.indexOf(mode)}
+              onChange={(idx) => {
+                const i = Math.round(idx);
+                const next = modes[i] || modes[0];
+                setMode(next);
+              }}
+              size={56}
+              formatValue={(idx) => modes[Math.round(idx)]}
+              ariaLabel="Program/Mode Dial"
+            />
           </div>
           {hasBackCameraSupport && (
             <button
@@ -522,52 +526,55 @@ function App() {
           <div className="bottom-rail">
             <div className="rail-section">
               {/* Quick settings condensed to match DSLR style */}
-              <div className="dial leather-texture">
+              <div className="dial leather-texture" title="Zoom" aria-label="Zoom dial">
                 <label className="dial-label" title="Zoom">
                   Zoom <SupportTag ok={zoomSupported} />
                 </label>
-                <input
-                  type="range"
-                  min="1"
-                  max="5"
-                  step="0.1"
+                <Dial
+                  min={1}
+                  max={5}
+                  step={0.1}
                   value={zoom}
-                  onChange={(e) => applyZoom(parseFloat(e.target.value))}
-                  aria-label="Zoom"
+                  onChange={(v) => applyZoom(parseFloat(v))}
+                  size={68}
+                  formatValue={(v) => `${v.toFixed(1)}x`}
+                  ariaLabel="Zoom"
                 />
               </div>
 
-              <div className="dial">
+              <div className="dial" title="Exposure Compensation" aria-label="Exposure compensation dial">
                 <label className="dial-label" title="Exposure">
                   EV <SupportTag ok={exposureSupported} />
                 </label>
-                <input
-                  type="range"
-                  min="-3"
-                  max="3"
-                  step="0.5"
+                <Dial
+                  min={-3}
+                  max={3}
+                  step={0.5}
                   value={exposureComp}
-                  onChange={(e) => applyExposureComp(parseFloat(e.target.value))}
-                  aria-label="Exposure compensation"
+                  onChange={(v) => applyExposureComp(parseFloat(v))}
+                  size={68}
+                  formatValue={(v) => (v > 0 ? `+${v}` : `${v}`)}
+                  ariaLabel="Exposure compensation"
                 />
               </div>
 
-              <div className="dial">
+              <div className="dial" title="ISO" aria-label="ISO dial">
                 <label className="dial-label" title="ISO">
                   ISO <SupportTag ok={isoSupported} />
                 </label>
-                <input
-                  type="range"
-                  min="50"
-                  max="800"
-                  step="10"
+                <Dial
+                  min={50}
+                  max={800}
+                  step={10}
                   value={iso}
-                  onChange={(e) => applyISO(parseInt(e.target.value, 10))}
-                  aria-label="ISO"
+                  onChange={(v) => applyISO(parseInt(v, 10))}
+                  size={68}
+                  formatValue={(v) => `ISO ${v}`}
+                  ariaLabel="ISO"
                 />
               </div>
 
-              <div className="dial">
+              <div className="dial" title="Focus" aria-label="Focus controls">
                 <label className="dial-label" title="Focus">Focus <SupportTag ok={focusSupported} /></label>
                 <div className="dial-inline">
                   <select
@@ -580,21 +587,22 @@ function App() {
                     <option value="manual">Manual</option>
                   </select>
                   {focusMode === 'manual' && (
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
+                    <Dial
+                      min={0}
+                      max={1}
+                      step={0.01}
                       value={focusDistance}
-                      onChange={(e) => applyFocus('manual', parseFloat(e.target.value))}
-                      aria-label="Manual focus distance"
-                      title="Manual focus"
+                      onChange={(v) => applyFocus('manual', parseFloat(v))}
+                      size={56}
+                      formatValue={(v) => v.toFixed(2)}
+                      ariaLabel="Manual focus distance"
+                      title="Manual focus distance"
                     />
                   )}
                 </div>
               </div>
 
-              <div className="dial">
+              <div className="dial" title="White Balance" aria-label="White Balance presets">
                 <label className="dial-label" title="WB">
                   WB <SupportTag ok={wbSupported} />
                 </label>
