@@ -12,6 +12,70 @@
   --shadow: 0 6px 24px rgba(0,0,0,0.06), 0 2px 6px rgba(0,0,0,0.04);
 
   --radius: 16px;
+
+  /* Leather texture tuning (strength and size) */
+  --leather-alpha: 0.18; /* visibility of grain in light theme */
+  --leather-alpha-elev: 0.22; /* slightly stronger on elevated panels */
+  --leather-size: 4px; /* grain size */
+}
+
+/* Dark theme variables toggle via .theme-dark at root container */
+.theme-dark {
+  --color-primary: #90caf9; /* softer primary for dark environment */
+  --color-accent: #f48fb1;
+  --color-secondary: #0b0f14;
+
+  --bg: #0d1117;
+  --bg-elev: #0f141b;
+  --text: #e6edf3;
+  --muted: #9aa7b3;
+  --border: #1f2630;
+  --shadow: 0 10px 28px rgba(0,0,0,0.45), 0 2px 10px rgba(0,0,0,0.35);
+
+  --leather-alpha: 0.12;      /* make grain subtler in dark */
+  --leather-alpha-elev: 0.16; /* slightly more visible on panels */
+  --leather-size: 3px;
+}
+
+/* Leather texture: inline CSS-generated grain using layered gradients */
+.leather-texture {
+  position: relative;
+}
+.leather-texture::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  /* Two noise-like layers + subtle vignette */
+  background:
+    radial-gradient( circle at 30% 30%, rgba(255,255,255,0.06), rgba(255,255,255,0) 35% ),
+    radial-gradient( circle at 70% 60%, rgba(0,0,0,0.05), rgba(0,0,0,0) 45% ),
+    repeating-radial-gradient( circle at 50% 50%, rgba(0,0,0,0.06), rgba(0,0,0,0.06) calc(var(--leather-size) * 0.5), rgba(0,0,0,0.0) calc(var(--leather-size) * 1.1) ),
+    repeating-linear-gradient( 25deg, rgba(0,0,0,0.05), rgba(0,0,0,0.05) var(--leather-size), rgba(255,255,255,0.03) calc(var(--leather-size) * 1.2), rgba(255,255,255,0.03) calc(var(--leather-size) * 2) );
+  opacity: var(--leather-alpha);
+  mix-blend-mode: multiply;
+}
+
+/* Slightly stronger leather on elevated surfaces */
+.leather-elev::before {
+  opacity: var(--leather-alpha-elev);
+}
+
+/* Subtle vignette for shells/panels to feel tactile */
+.vignette {
+  position: relative;
+}
+.vignette::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.06);
+}
+.theme-dark .vignette::after {
+  box-shadow: inset 0 0 60px rgba(0,0,0,0.35);
 }
 
 /* Layout */
@@ -28,10 +92,29 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
 }
 
+/* Global background leather (very subtle) */
+#root {
+  position: relative;
+}
+#root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient( circle at 20% 15%, rgba(255,255,255,0.06), rgba(255,255,255,0) 30% ),
+    repeating-linear-gradient( 15deg, rgba(0,0,0,0.05), rgba(0,0,0,0.05) 4px, rgba(255,255,255,0.03) 8px, rgba(255,255,255,0.03) 12px );
+  opacity: calc(var(--leather-alpha) * 0.75);
+  mix-blend-mode: multiply;
+  z-index: 0;
+}
+
 .camera-app {
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto 1fr auto;
+  position: relative;
+  z-index: 1; /* above global texture */
 }
 
 /* Topbar */
@@ -45,6 +128,24 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
+}
+.topbar .brand {
+  text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+}
+.theme-dark .topbar .brand {
+  text-shadow: none;
+}
+
+/* Theme toggle button styles (uses .btn) */
+.btn-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn:focus-visible, .round-btn:focus-visible, .chip:focus-visible, .mode-segment:focus-visible, select:focus-visible, input[type="range"]:focus-visible {
+  outline: 3px solid rgba(25, 118, 210, 0.4); /* fallback without color-mix */
+  outline-offset: 2px;
+  border-color: var(--color-primary);
 }
 
 .brand {
@@ -79,6 +180,13 @@ body {
   grid-template-columns: 56px 1fr 56px;
   grid-template-rows: auto 1fr auto;
   gap: 12px;
+  overflow: hidden; /* contain texture overlay */
+}
+.dslr-shell.leather-texture::before {
+  border-radius: calc(var(--radius) - 2px);
+}
+.dslr-shell.vignette::after {
+  border-radius: calc(var(--radius) - 2px);
 }
 
 /* Mode dial segments */
@@ -89,7 +197,10 @@ body {
   border-radius: 999px;
   padding: 4px;
   background: var(--bg-elev);
+  position: relative;
 }
+.mode-dial.leather-texture::before { border-radius: 999px; opacity: var(--leather-alpha-elev); }
+
 .mode-segment {
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -103,6 +214,10 @@ body {
 .mode-segment.active {
   color: var(--color-primary);
   border-color: var(--color-primary);
+  background: rgba(25, 118, 210, 0.08); /* approx 92% transparent */
+}
+.theme-dark .mode-segment.active {
+  background: rgba(144, 202, 249, 0.12); /* slightly stronger tint for dark */
 }
 
 /* Side button stacks */
@@ -124,15 +239,23 @@ body {
   place-items: center;
   color: var(--text);
   cursor: pointer;
-  transition: transform .12s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
+  transition: transform .12s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease, background .2s ease;
+  position: relative;
+  overflow: hidden;
 }
+.round-btn.leather-texture::before { border-radius: 50%; opacity: var(--leather-alpha-elev); }
 .round-btn:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow);
+  background: rgba(0, 0, 0, 0.04); /* subtle hover tint */
 }
 .round-btn.active {
   color: var(--color-accent);
   border-color: var(--color-accent);
+  background: rgba(245, 0, 87, 0.08); /* accent tint */
+}
+.theme-dark .round-btn.active {
+  background: rgba(244, 143, 177, 0.14); /* accent tint for dark */
 }
 
 /* Viewfinder */
@@ -192,7 +315,9 @@ body {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 999px;
+  position: relative;
 }
+.vf-info.leather-texture::before { border-radius: 999px; opacity: var(--leather-alpha-elev); }
 
 /* Bottom rail */
 .bottom-rail {
@@ -221,7 +346,10 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 8px 10px;
+  position: relative;
+  overflow: hidden;
 }
+.dial.leather-texture::before { border-radius: 12px; opacity: var(--leather-alpha-elev); }
 .dial.compact {
   padding: 6px 8px;
 }
@@ -273,12 +401,20 @@ body {
 
 .error {
   color: var(--color-accent);
-  background: #fff0f4;
-  border: 1px solid #ffd1e0;
+  background: rgba(245, 0, 87, 0.08);
+  border: 1px solid rgba(245, 0, 87, 0.3);
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 14px;
 }
+.theme-dark .error {
+  background: rgba(244, 143, 177, 0.16);
+  border-color: rgba(244, 143, 177, 0.3);
+}
+
+/* Viewfinder frame outline visibility in dark */
+.theme-dark .vf-corner { border-color: rgba(255,255,255,0.85); }
+.theme-dark .vf-center { border-color: rgba(255,255,255,0.9); }
 
 /* DSLR shutter style */
 .capture-button.dslr {
@@ -292,6 +428,10 @@ body {
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.2s ease;
   box-shadow: 0 10px 24px rgba(25,118,210,0.25), 0 2px 6px rgba(25,118,210,0.2);
+}
+.theme-dark .capture-button.dslr {
+  background: #0c141d;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.35);
 }
 .capture-button.dslr .capture-dot {
   width: 56px;
@@ -324,11 +464,12 @@ body {
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
-  transition: transform 0.12s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.12s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, border-color .2s ease;
 }
 .btn:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow);
+  background: rgba(0, 0, 0, 0.04);
 }
 .btn:active { transform: translateY(0); }
 .btn-secondary { border-color: var(--color-primary); color: var(--color-primary); }
@@ -348,7 +489,9 @@ body {
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, transform 0.12s ease, border-color .2s ease;
 }
-.chip.active { border-color: var(--color-primary); color: var(--color-primary); }
+.chip:hover { background: rgba(0, 0, 0, 0.06); }
+.chip.active { border-color: var(--color-primary); color: var(--color-primary); background: rgba(25, 118, 210, 0.08); }
+.theme-dark .chip.active { background: rgba(144, 202, 249, 0.12); }
 
 /* Gallery */
 .gallery {
@@ -358,7 +501,10 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 14px;
+  position: relative;
+  overflow: hidden;
 }
+.gallery.leather-texture::before { border-radius: var(--radius); opacity: 0.16; }
 .gallery-header {
   display: flex;
   align-items: center;
@@ -426,7 +572,10 @@ body {
   box-shadow: var(--shadow);
   padding: 12px 14px;
   min-width: 200px;
+  position: relative;
+  overflow: hidden;
 }
+.menu-content.leather-texture::before { border-radius: 12px; opacity: var(--leather-alpha-elev); }
 
 @media (max-width: 820px) {
   .dslr-shell {

@@ -95,6 +95,29 @@ function App() {
   const [showInfo, setShowInfo] = useState(true);
   const [showMenu, setShowMenu] = useState(false);
 
+  // Theme state: light (default) or dark
+  const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const [theme, setTheme] = useState(prefersDark ? 'dark' : 'light');
+
+  useEffect(() => {
+    // Persist and apply theme class at top-level container
+    try {
+      const saved = localStorage.getItem('camera_theme');
+      if (saved === 'light' || saved === 'dark') {
+        setTheme(saved);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('camera_theme', theme);
+    } catch {}
+  }, [theme]);
+
+  const isDark = theme === 'dark';
+  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+
   // Mode dial: P/A/S/M/Auto
   const modes = ['AUTO', 'P', 'A', 'S', 'M'];
   const [mode, setMode] = useState('AUTO');
@@ -359,12 +382,21 @@ function App() {
 
   // DSLR-inspired segmented UI
   return (
-    <div className="camera-app">
-      <nav className="topbar">
+    <div className={`camera-app ${isDark ? 'theme-dark' : ''}`}>
+      <nav className="topbar leather-texture">
         <div className="brand">DSLR Cam</div>
         <div className="actions">
+          {/* Theme toggle */}
+          <button
+            className="btn btn-toggle"
+            onClick={toggleTheme}
+            aria-label={`Switch to ${isDark ? 'light' : 'dark'} theme`}
+            title={`Theme: ${isDark ? 'Dark' : 'Light'}`}
+          >
+            {isDark ? '🌙 Dark' : '☀️ Light'}
+          </button>
           {/* Mode dial display */}
-          <div className="mode-dial" role="radiogroup" aria-label="Mode dial">
+          <div className="mode-dial leather-texture" role="radiogroup" aria-label="Mode dial">
             {modes.map((m) => (
               <button
                 key={m}
@@ -393,11 +425,11 @@ function App() {
       </nav>
 
       <main className="content">
-        <section className="dslr-shell">
+        <section className="dslr-shell leather-texture vignette">
           {/* Left side button column */}
           <aside className="dslr-side left">
             <button
-              className={`round-btn ${flashOn ? 'active' : ''}`}
+              className={`round-btn leather-texture ${flashOn ? 'active' : ''}`}
               onClick={() => setFlashOn((v) => !v)}
               aria-pressed={flashOn}
               aria-label="Toggle flash"
@@ -406,7 +438,7 @@ function App() {
               <IconFlash on={flashOn} />
             </button>
             <button
-              className="round-btn"
+              className="round-btn leather-texture"
               onClick={() => setShowInfo((v) => !v)}
               aria-pressed={showInfo}
               aria-label="Toggle info overlay"
@@ -444,7 +476,7 @@ function App() {
               {error && <div className="error">{error}</div>}
             </div>
             {showInfo && (
-              <div className="vf-info" aria-live="polite">
+              <div className="vf-info leather-texture" aria-live="polite">
                 <span title="Mode" aria-label={`Mode ${mode}`}>{mode}</span>
                 <span title="ISO" aria-label={`ISO ${iso}`}>ISO {iso}</span>
                 <span title="WB" aria-label={`White balance ${wbMode}`}>WB {wbMode}</span>
@@ -460,7 +492,7 @@ function App() {
           {/* Right side vertical control cluster */}
           <aside className="dslr-side right">
             <button
-              className="round-btn"
+              className="round-btn leather-texture"
               onClick={() => setShowMenu((v) => !v)}
               aria-pressed={showMenu}
               aria-label="Menu"
@@ -469,7 +501,7 @@ function App() {
               <IconMenu />
             </button>
             <button
-              className="round-btn"
+              className="round-btn leather-texture"
               onClick={() => applyWhiteBalance(wbMode === 'auto' ? 'daylight' : 'auto')}
               aria-label="Toggle white balance Auto/Daylight"
               title="WB"
@@ -477,7 +509,7 @@ function App() {
               <IconWB />
             </button>
             <button
-              className="round-btn"
+              className="round-btn leather-texture"
               onClick={() => applyISO(Math.min(800, iso + 100))}
               aria-label="Increase ISO"
               title="ISO +"
@@ -490,7 +522,7 @@ function App() {
           <div className="bottom-rail">
             <div className="rail-section">
               {/* Quick settings condensed to match DSLR style */}
-              <div className="dial">
+              <div className="dial leather-texture">
                 <label className="dial-label" title="Zoom">
                   Zoom <SupportTag ok={zoomSupported} />
                 </label>
@@ -599,7 +631,7 @@ function App() {
 
             {/* Utility area: resolution + facing + filters */}
             <div className="rail-section right-compact">
-              <div className="dial compact">
+              <div className="dial compact leather-texture">
                 <label className="dial-label">Res</label>
                 <select
                   value={resolution}
@@ -675,7 +707,7 @@ function App() {
         </section>
 
         {photos.length > 0 && (
-          <section className="gallery">
+          <section className="gallery leather-texture">
             <div className="gallery-header">
               <h2 className="section-title">Recent</h2>
               <div className="gallery-actions">
@@ -724,7 +756,7 @@ function App() {
       {/* Simple inline menu panel */}
       {showMenu && (
         <div className="menu-panel" role="dialog" aria-label="Menu">
-          <div className="menu-content">
+          <div className="menu-content leather-texture">
             <h3>Menu</h3>
             <ul>
               <li>Mode: {mode}</li>
