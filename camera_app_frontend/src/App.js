@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './App.css';
 import Dial from './components/Dial';
+import ModeDial from './components/ModeDial';
 
 /**
  * CameraApp provides:
@@ -397,21 +398,13 @@ function App() {
             {isDark ? '🌙 Dark' : '☀️ Light'}
           </button>
 
-          {/* Program/Mode Dial (rotating) */}
+          {/* Program/Mode Dial (always-visible segments) */}
           <div className="dial compact leather-texture" title="Mode dial" aria-label="Mode dial">
-            <Dial
-              label="Mode"
-              min={0}
-              max={modes.length - 1}
-              step={1}
-              value={modes.indexOf(mode)}
-              onChange={(idx) => {
-                const i = Math.round(idx);
-                const next = modes[i] || modes[0];
-                setMode(next);
-              }}
+            <ModeDial
+              modes={modes}
+              value={mode}
+              onChange={(m) => setMode(m)}
               size={56}
-              formatValue={(idx) => modes[Math.round(idx)]}
               ariaLabel="Program/Mode Dial"
             />
           </div>
