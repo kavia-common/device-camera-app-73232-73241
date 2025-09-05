@@ -371,6 +371,25 @@ body {
      we center within our own square using grid in component inline styles */
 }
 
+/* Tunables for ModeDial label spacing and size */
+:root {
+  --mode-label-font-size: 12px;
+  --mode-label-padding-v: 4px;
+  --mode-label-padding-h: 8px;
+}
+.theme-dark {
+  /* keep same sizes in dark; color handled by existing vars */
+}
+
+/* Make sure buttons around the ring do not affect flow and are balanced */
+.mode-dial-wrapper .mode-segment {
+  font-size: var(--mode-label-font-size);
+  line-height: 1;
+  padding: var(--mode-label-padding-v) var(--mode-label-padding-h);
+  white-space: nowrap;
+  border-radius: 999px;
+}
+
 /* Make sure buttons around the ring do not affect flow and are balanced */
 .mode-dial-wrapper .mode-segment {
   font-size: 12px;
@@ -695,6 +714,13 @@ body {
   .capture-button.dslr .capture-dot { width: 48px; height: 48px; }
   .dial input[type="range"] { width: 120px; }
   .dial.compact input[type="range"] { width: 90px; }
+
+  /* Slightly reduce label chip size to keep spacing clean on smaller viewports */
+  .mode-dial-wrapper .mode-segment {
+    --mode-label-font-size: 11px;
+    --mode-label-padding-v: 3px;
+    --mode-label-padding-h: 7px;
+  }
 }
 
 @media (max-width: 640px) {

@@ -26,8 +26,9 @@ export default function ModeDial({
   const knobRadius = Math.max(20, radius * 0.58);
 
   // Labels should sit just outside the physical knob boundary
-  // We space them relative to the rotor's bounding square so they form a ring around it.
-  const labelRadius = radius * 1.15; // slightly further to clear the knob edge
+  // Increase spacing to avoid overlap and keep balance across sizes/themes
+  // Use an outward offset so letters are comfortably away from the knob edge.
+  const labelRadius = radius * 1.32; // push labels further out for clarity
 
   // We define 0 degrees at top (12 o'clock) and increase clockwise for label placement.
   const degToRad = (d) => (d * Math.PI) / 180;
@@ -180,7 +181,8 @@ export default function ModeDial({
   };
 
   // Single square that defines the center for both the ring and rotor
-  const outerSize = size * 2; // container square for ring/knob
+  // Slightly larger outer square to accommodate the pushed-out labels.
+  const outerSize = Math.round(size * 2.2);
   const center = { x: outerSize / 2, y: outerSize / 2 };
 
   return (
@@ -212,7 +214,8 @@ export default function ModeDial({
         }}
       >
         {modesWithAngles.map(({ mode, angle }) => {
-          const pos = polar(center, labelRadius + radius - (size / 2), angle);
+          // Place labels using the expanded labelRadius directly to push them outward.
+          const pos = polar(center, labelRadius, angle);
           const isActive = mode === value;
           return (
             <button
